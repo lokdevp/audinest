@@ -21,7 +21,7 @@ const openMenu = () => router.push('/menu');
 function HeaderTitle() {
   return (
     <View>
-      <Text style={styles.brand}>Native</Text>
+      <Text style={styles.brand}>Audinest</Text>
       <Text style={styles.brandLabel}>Library</Text>
     </View>
   );
