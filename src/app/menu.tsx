@@ -43,8 +43,8 @@ export default function MenuScreen() {
   const libraryUri = useLibrary((state) => state.libraryUri);
   const scan = usePlayerState((state) => state.scan);
 
-  const scanAndReturn = async (uri: string) => {
-    await loadLibrary(uri);
+  const scanAndReturn = async (uri: string, full = false) => {
+    await loadLibrary(uri, { full });
     router.back();
   };
 
@@ -62,6 +62,7 @@ export default function MenuScreen() {
         <Text style={styles.heading}>Audiobook folder</Text>
         <Text style={styles.text}>
           Each folder or audio file directly inside the chosen folder becomes one audiobook.
+          Rescan only reads books whose files changed; Full rescan reads everything again.
         </Text>
         {libraryUri && (
           <Text style={styles.path} numberOfLines={2}>
@@ -88,6 +89,14 @@ export default function MenuScreen() {
                 label="Rescan"
                 onPress={() => scanAndReturn(libraryUri)}
                 icon={<MaterialIcons name="refresh" size={18} color={colors.primary} />}
+              />
+            )}
+            {libraryUri && (
+              <Pill
+                label="Full rescan"
+                accessibilityLabel="Full rescan: read every file again"
+                onPress={() => scanAndReturn(libraryUri, true)}
+                icon={<MaterialIcons name="sync" size={18} color={colors.primary} />}
               />
             )}
           </View>

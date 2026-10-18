@@ -1,4 +1,4 @@
-import { assembleAudiobook, classifyEntries, type Entry, type ParsedFile } from '@/lib/scan';
+import { assembleAudiobook, classifyEntries, sourceFingerprint, type Entry, type ParsedFile } from '@/lib/scan';
 import type { FileMetadata } from '@/lib/metadata';
 
 jest.mock('expo-file-system', () => ({}));
@@ -10,6 +10,7 @@ const dir = (name: string): Entry => ({ name, uri: `root/${name}`, isDirectory: 
 
 const meta = (overrides: Partial<FileMetadata> = {}): FileMetadata => ({
   album: null,
+  author: null,
   trackTitle: 'Track',
   duration: 10,
   chapters: [],
@@ -53,8 +54,11 @@ describe('assembleAudiobook', () => {
       { entry: source.audio[0], metadata: meta({ album: 'The Album', trackTitle: 'One', duration: 30 }) },
       { entry: source.audio[1], metadata: meta({ trackTitle: 'Two', duration: 45 }) },
     ];
+    files[0].metadata.author = 'The Author';
     const book = assembleAudiobook(source, files, 'file:///cover.jpg');
-    expect(book).toMatchObject({ id: 'root/Book', title: 'The Album', type: 'MP3DIR', duration: 75, coverUri: 'file:///cover.jpg' });
+    expect(book).toMatchObject({
+      id: 'root/Book', title: 'The Album', author: 'The Author', type: 'MP3DIR', duration: 75, coverUri: 'file:///cover.jpg',
+    });
     expect(book.chapters).toEqual([
       { title: 'One', uri: 'root/1.mp3', startTime: 0, duration: 30, totalProgressTime: 0 },
       { title: 'Two', uri: 'root/2.mp3', startTime: 0, duration: 45, totalProgressTime: 30 },
@@ -78,5 +82,27 @@ describe('assembleAudiobook', () => {
     const source = { id: 'root/Dir', name: 'Dir', isDirectory: true, image: null, audio: [file('a.m4b')] };
     const book = assembleAudiobook(source, [{ entry: source.audio[0], metadata: meta() }], null);
     expect(book).toMatchObject({ title: 'Dir', type: 'M4BDIR' });
+  });
+});
+
+describe('sourceFingerprint', () => {
+  const stamps = [
+    { name: '1.mp3', size: 100, modificationTime: 1000 },
+    { name: '2.mp3', size: 200, modificationTime: 2000 },
+  ];
+
+  it('is stable for the same files', () => {
+    expect(sourceFingerprint(stamps)).toBe(sourceFingerprint(stamps.map((stamp) => ({ ...stamp }))));
+  });
+
+  it('changes when a size or modification time changes', () => {
+    const original = sourceFingerprint(stamps);
+    expect(sourceFingerprint([stamps[0], { ...stamps[1], size: 201 }])).not.toBe(original);
+    expect(sourceFingerprint([stamps[0], { ...stamps[1], modificationTime: 2001 }])).not.toBe(original);
+  });
+
+  it('is null when a file has no size or time, so the book is always parsed', () => {
+    expect(sourceFingerprint([stamps[0], { ...stamps[1], modificationTime: undefined }])).toBeNull();
+    expect(sourceFingerprint([{ ...stamps[0], size: undefined }])).toBeNull();
   });
 });

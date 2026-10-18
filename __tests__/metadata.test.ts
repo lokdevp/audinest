@@ -41,6 +41,7 @@ describe('metadata parsing through FileHandleTokenizer', () => {
   it('reads title, duration and chapters from an M4B', async () => {
     const { metadata, isClosed } = await parseFixture('book.m4b');
     expect(metadata.album).toBe('Test Book');
+    expect(metadata.author).toBeNull();
     expect(metadata.duration).toBeCloseTo(6, 0);
     expect(metadata.chapters.map((chapter) => chapter.title)).toEqual(['Opening', 'Middle', 'End']);
     expect(metadata.chapters[1].startTime).toBeCloseTo(2, 1);
@@ -52,6 +53,7 @@ describe('metadata parsing through FileHandleTokenizer', () => {
     const { metadata } = await parseFixture('track.mp3');
     expect(metadata.album).toBe('Mp3 Album');
     expect(metadata.trackTitle).toBe('Track One');
+    expect(metadata.author).toBe('Mp3 Author');
     expect(metadata.duration).toBeGreaterThan(2);
     expect(metadata.chapters).toEqual([]);
     expect(metadata.picture?.format).toBe('image/png');

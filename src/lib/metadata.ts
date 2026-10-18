@@ -11,6 +11,8 @@ export interface FileChapter {
 
 export interface FileMetadata {
   album: string | null;
+  /** Album artist, else artist. */
+  author: string | null;
   /** Track title, else the file name without its extension. */
   trackTitle: string;
   duration: number;
@@ -34,6 +36,7 @@ export function toFileMetadata(metadata: IAudioMetadata, fileName: string): File
   });
   return {
     album: common.album || null,
+    author: common.albumartist || common.artist || null,
     trackTitle: common.title || stripExtension(fileName),
     duration,
     chapters,

@@ -6,6 +6,8 @@ import {
   bookEnd,
   chapterStart,
   fileTime,
+  initialPosition,
+  isFinished,
   nextChapterIdx,
   nextFileChapterIdx,
   positionFromFileTime,
@@ -191,7 +193,8 @@ export async function play() {
   await ensureAudioMode();
   activeBookId = book.id;
   let position = getPosition(book.id);
-  if (position.totalProgressTime >= book.duration - 1) {
+  useProgress.getState().markPlayed(book.id);
+  if (isFinished(book, position)) {
     position = chapterStart(book, 0);
     savePosition(book, position);
   } else if (pausedAt !== null && useSettings.getState().rewindOnResume) {
@@ -215,7 +218,7 @@ export async function play() {
   try {
     audio.setActiveForLockScreen(
       true,
-      { title: book.title, artworkUrl: book.coverUri ?? undefined },
+      { title: book.title, artist: book.author ?? undefined, artworkUrl: book.coverUri ?? undefined },
       { showSeekForward: true, showSeekBackward: true },
     );
   } catch (error) {
@@ -325,6 +328,28 @@ export function selectBook(id: string) {
     stop();
   }
   useProgress.getState().select(id);
+}
+
+/** Moves a book to its end, so it shows as finished. */
+export function markFinished(id: string) {
+  const book = useLibrary.getState().books[id];
+  if (book) {
+    if (id === activeBookId) {
+      stop();
+    }
+    savePosition(book, bookEnd(book));
+  }
+}
+
+/** Moves a book back to its start. */
+export function resetProgress(id: string) {
+  const book = useLibrary.getState().books[id];
+  if (book) {
+    if (id === activeBookId) {
+      stop();
+    }
+    savePosition(book, initialPosition());
+  }
 }
 
 /** Starts a sleep timer of `minutes`, stops at the end of the chapter, or (null) cancels it. */

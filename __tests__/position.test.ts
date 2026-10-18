@@ -2,6 +2,7 @@ import {
   bookEnd,
   chapterStart,
   fileTime,
+  isFinished,
   nextChapterIdx,
   nextFileChapterIdx,
   positionFromFileTime,
@@ -91,5 +92,20 @@ describe('chapter navigation', () => {
     const book = singleFileBook();
     expect(fileTime(book, { chapterIdx: 1, currentTime: 20, totalProgressTime: 120 })).toBe(120);
     expect(fileTime(multiFileBook(), { chapterIdx: 2, currentTime: 20, totalProgressTime: 120 })).toBe(20);
+  });
+});
+
+describe('isFinished', () => {
+  const book = singleFileBook();
+  const at = (seconds: number) => ({ chapterIdx: 2, currentTime: seconds - 250, totalProgressTime: seconds });
+
+  it('is true within a second of the end of the book', () => {
+    expect(isFinished(book, at(298.9))).toBe(false);
+    expect(isFinished(book, at(299))).toBe(true);
+    expect(isFinished(book, bookEnd(book))).toBe(true);
+  });
+
+  it('is false without a saved position', () => {
+    expect(isFinished(book, undefined)).toBe(false);
   });
 });

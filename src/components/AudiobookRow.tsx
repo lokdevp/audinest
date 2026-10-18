@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formattedTime } from '@/lib/format';
+import { isFinished } from '@/lib/position';
 import { colors, radius, spacing, type } from '@/theme';
 import type { Audiobook, Position } from '@/types';
 import { AudiobookProgress } from './AudiobookProgress';
@@ -12,26 +13,34 @@ interface Props {
   position: Position | undefined;
   selected: boolean;
   onPress: (id: string) => void;
+  onLongPress?: (id: string) => void;
 }
 
-export const AudiobookRow = memo(function AudiobookRow({ book, position, selected, onPress }: Props) {
+export const AudiobookRow = memo(function AudiobookRow({ book, position, selected, onPress, onLongPress }: Props) {
   const elapsed = position?.totalProgressTime ?? 0;
   const percent = book.duration > 0 ? Math.floor(Math.min(100, (elapsed / book.duration) * 100)) : 0;
+  const finished = isFinished(book, position);
   return (
     <Pressable
       style={({ pressed }) => [styles.row, selected && styles.selected, pressed && styles.pressed]}
       onPress={() => onPress(book.id)}
+      onLongPress={onLongPress && (() => onLongPress(book.id))}
     >
       {selected && <View style={styles.accent} />}
       <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={28} />
       <View style={styles.status}>
-        <Text style={[styles.title, selected && styles.titleSelected]} numberOfLines={2}>
-          {book.title}
-        </Text>
+        <View>
+          <Text style={[styles.title, selected && styles.titleSelected]} numberOfLines={2}>
+            {book.title}
+          </Text>
+          {book.author && <Text style={styles.author} numberOfLines={1}>{book.author}</Text>}
+        </View>
         <View style={styles.meta}>
           <Text style={styles.time}>{formattedTime(elapsed)} / {formattedTime(book.duration)}</Text>
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>{percent}%</Text>
+          <View style={[styles.chip, finished && styles.chipFinished]}>
+            <Text style={[styles.chipText, finished && styles.chipTextFinished]}>
+              {finished ? 'Finished' : `${percent}%`}
+            </Text>
           </View>
         </View>
         <AudiobookProgress progress={elapsed} duration={book.duration} />
@@ -85,6 +94,11 @@ const styles = StyleSheet.create({
   titleSelected: {
     color: colors.primary,
   },
+  author: {
+    ...type.labelMd,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+  },
   meta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -104,5 +118,11 @@ const styles = StyleSheet.create({
   chipText: {
     ...type.labelSm,
     color: colors.onSurface,
+  },
+  chipFinished: {
+    backgroundColor: colors.primary,
+  },
+  chipTextFinished: {
+    color: colors.onPrimary,
   },
 });

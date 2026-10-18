@@ -17,15 +17,20 @@ export async function pickLibraryFolder(): Promise<string | null> {
   }
 }
 
-/** Rescans the library folder. Saved positions of books that are still there are kept. */
-export async function loadLibrary(libraryUri: string) {
+/**
+ * Rescans the library folder. Saved positions of books that are still there are kept. Unless `full`
+ * is set, unchanged books of the same folder are kept as they are instead of being parsed again.
+ */
+export async function loadLibrary(libraryUri: string, { full = false } = {}) {
   if (usePlayerState.getState().scan) {
     return;
   }
   stop();
   usePlayerState.setState({ scan: { done: 0, total: 0 } });
   try {
-    const books = await scanLibrary(libraryUri, (scan) => usePlayerState.setState({ scan }));
+    const library = useLibrary.getState();
+    const previous = !full && library.libraryUri === libraryUri ? library.books : {};
+    const books = await scanLibrary(libraryUri, (scan) => usePlayerState.setState({ scan }), previous);
     useLibrary.getState().setLibrary(libraryUri, books);
     useProgress.getState().syncWithLibrary(books);
     pruneCovers(books);

@@ -98,6 +98,7 @@ export function assembleAudiobook(
   return {
     id: source.id,
     title: first.album || fallbackTitle,
+    author: first.author,
     type: bookType(source),
     duration: totalProgressTime,
     coverUri,
@@ -138,6 +139,42 @@ async function saveCover(source: BookSource, files: ParsedFile[]): Promise<strin
   return cover.uri;
 }
 
+export interface FileStamp {
+  name: string;
+  size: number | undefined;
+  modificationTime: number | undefined;
+}
+
+/** Identifies the current version of a book's files, or null when a size or time is unknown. */
+export function sourceFingerprint(stamps: FileStamp[]): string | null {
+  if (stamps.some(({ size, modificationTime }) => size === undefined || modificationTime === undefined)) {
+    return null;
+  }
+  return stamps.map(({ name, size, modificationTime }) => `${name}:${size}:${modificationTime}`).join('|');
+}
+
+function stamp(entry: Entry): FileStamp {
+  try {
+    const { size, modificationTime } = new File(entry.uri).info();
+    return { name: entry.name, size, modificationTime };
+  } catch {
+    return { name: entry.name, size: undefined, modificationTime: undefined };
+  }
+}
+
+/** A cheap query per file: no file contents are read. */
+function fingerprintSource(source: BookSource): string | null {
+  return sourceFingerprint([...source.audio, ...(source.image ? [source.image] : [])].map(stamp));
+}
+
+/** A previously scanned book can be kept if its files are unchanged and its cover is still there. */
+function reusable(previous: Audiobook | undefined, fingerprint: string | null): previous is Audiobook {
+  return Boolean(
+    previous && fingerprint && previous.fingerprint === fingerprint &&
+      (!previous.coverUri || new File(previous.coverUri).exists),
+  );
+}
+
 async function parseSource(source: BookSource): Promise<Audiobook> {
   const files: ParsedFile[] = [];
   // Read sequentially: SAF reads are slow and parallel reads of many files exhaust memory.
@@ -156,17 +193,23 @@ export interface ScanProgress {
   total: number;
 }
 
-/** Scans the library directory. A book that fails to parse is logged and skipped. */
+/**
+ * Scans the library directory. A book that fails to parse is logged and skipped. Books in `previous`
+ * whose files haven't changed are reused without reading their files.
+ */
 export async function scanLibrary(
   libraryUri: string,
   onProgress: (progress: ScanProgress) => void,
+  previous: Record<string, Audiobook> = {},
 ): Promise<Audiobook[]> {
   const sources = classifyEntries(listDirectory({ name: '', uri: libraryUri, isDirectory: true }), listDirectory);
   const books: Audiobook[] = [];
   onProgress({ done: 0, total: sources.length });
   for (const [idx, source] of sources.entries()) {
     try {
-      books.push(await parseSource(source));
+      const fingerprint = fingerprintSource(source);
+      const known = previous[source.id];
+      books.push(reusable(known, fingerprint) ? known : { ...(await parseSource(source)), fingerprint });
     } catch (error) {
       console.warn(`Skipping ${source.name}:`, error);
     }

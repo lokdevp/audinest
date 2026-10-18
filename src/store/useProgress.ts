@@ -11,8 +11,11 @@ interface ProgressState {
   /** Default speed, used by books that have no speed of their own. */
   speed: number;
   speeds: Record<string, number>;
+  /** When each book was last started, in ms since epoch. */
+  lastPlayedAt: Record<string, number>;
   select: (id: string) => void;
   setPosition: (id: string, position: Position) => void;
+  markPlayed: (id: string) => void;
   /** Sets the speed of a book, and the default for books without one. */
   setSpeed: (id: string, speed: number) => void;
   /** After a rescan: keep positions of books that still exist and are still valid, reset the rest. */
@@ -46,14 +49,17 @@ export const useProgress = create<ProgressState>()(
       selectedId: null,
       speed: 1,
       speeds: {},
+      lastPlayedAt: {},
       select: (id) => set({ selectedId: id }),
       setPosition: (id, position) =>
         set((state) => ({ positions: { ...state.positions, [id]: position } })),
+      markPlayed: (id) => set((state) => ({ lastPlayedAt: { ...state.lastPlayedAt, [id]: Date.now() } })),
       setSpeed: (id, speed) => set((state) => ({ speed, speeds: { ...state.speeds, [id]: speed } })),
       syncWithLibrary: (books) =>
         set((state) => ({
           positions: reconcilePositions(state.positions, books),
           speeds: pruneRecord(state.speeds, books),
+          lastPlayedAt: pruneRecord(state.lastPlayedAt, books),
           selectedId: books.some((book) => book.id === state.selectedId) ? state.selectedId : null,
         })),
     }),

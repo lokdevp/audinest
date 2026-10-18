@@ -15,10 +15,14 @@ export interface Audiobook {
   /** URI of the library entry (file or directory) the book was built from. */
   id: string;
   title: string;
+  /** Album artist or artist tag of the first file. Missing in libraries scanned before it was added. */
+  author?: string | null;
   type: BookType;
   duration: number;
   coverUri: string | null;
   chapters: Chapter[];
+  /** Names, sizes and modification times of the book's files, to skip unchanged books on a rescan. */
+  fingerprint?: string | null;
 }
 
 export interface Position {

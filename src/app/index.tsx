@@ -1,14 +1,16 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Stack, router } from 'expo-router';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { pause, play, selectBook, skip } from '@/audio/playback';
+import { markFinished, pause, play, resetProgress, selectBook, skip } from '@/audio/playback';
 import { AudiobookRow } from '@/components/AudiobookRow';
 import { MINI_PLAYER_HEIGHT, MiniPlayer } from '@/components/MiniPlayer';
 import { Pill } from '@/components/Pill';
 import { ResumeCard } from '@/components/ResumeCard';
+import { LIBRARY_SORTS, sortBooks } from '@/lib/library';
+import { isFinished } from '@/lib/position';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useProgress } from '@/store/useProgress';
@@ -18,6 +20,22 @@ import { colors, fonts, spacing, type } from '@/theme';
 
 const openPlayer = () => router.push('/player');
 const openMenu = () => router.push('/menu');
+
+/** Long press on a book: mark it finished, or start it over once it is finished. */
+function showBookActions(id: string) {
+  const book = useLibrary.getState().books[id];
+  if (!book) {
+    return;
+  }
+  const finished = isFinished(book, useProgress.getState().positions[id]);
+  Alert.alert(book.title, undefined, [
+    finished
+      ? { text: 'Reset progress', onPress: () => resetProgress(id) }
+      : { text: 'Mark as finished', onPress: () => markFinished(id) },
+    ...(finished ? [] : [{ text: 'Reset progress', onPress: () => resetProgress(id) }]),
+    { text: 'Cancel', style: 'cancel' as const },
+  ]);
+}
 
 function HeaderTitle() {
   return (
@@ -32,16 +50,22 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const booksById = useLibrary((state) => state.books);
   const positions = useProgress((state) => state.positions);
+  const lastPlayedAt = useProgress((state) => state.lastPlayedAt);
+  const sort = useSettings((state) => state.librarySort);
+  const hideFinished = useSettings((state) => state.hideFinished);
   const playing = usePlayerState((state) => state.playing);
   const skipForward = useSettings((state) => state.skipForward);
   const { book: current, position } = useSelectedBook();
   const speed = useBookSpeed(current?.id);
+  const allBooks = useMemo(() => Object.values(booksById), [booksById]);
+  // Re-sorted on position updates too; cheap next to rendering, and keeps "Progress" order live.
   const books = useMemo(
-    () =>
-      Object.values(booksById).sort((a, b) =>
-        a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })),
-    [booksById],
+    () => sortBooks(allBooks, sort, positions, lastPlayedAt, hideFinished),
+    [allBooks, sort, positions, lastPlayedAt, hideFinished],
   );
+  const sortIdx = LIBRARY_SORTS.findIndex(({ value }) => value === sort);
+  const nextSort = () => useSettings.getState().setLibrarySort(LIBRARY_SORTS[(sortIdx + 1) % LIBRARY_SORTS.length].value);
+  const toggleHideFinished = () => useSettings.getState().setHideFinished(!hideFinished);
 
   const openBook = useCallback((id: string) => {
     selectBook(id);
@@ -72,9 +96,10 @@ export default function LibraryScreen() {
             position={positions[item.id]}
             selected={item.id === current?.id}
             onPress={openBook}
+            onLongPress={showBookActions}
           />
         )}
-        ListHeaderComponent={books.length > 0 ? (
+        ListHeaderComponent={allBooks.length > 0 ? (
           <View>
             {current && (
               <>
@@ -93,12 +118,35 @@ export default function LibraryScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Your Library</Text>
               <Text style={styles.sectionCount}>
-                {books.length} {books.length === 1 ? 'book' : 'books'}
+                {books.length < allBooks.length && `${books.length} of `}
+                {allBooks.length} {allBooks.length === 1 ? 'book' : 'books'}
               </Text>
+            </View>
+            <View style={styles.listControls}>
+              <Pill
+                label={LIBRARY_SORTS[sortIdx]?.label ?? 'Title'}
+                accessibilityLabel={`Sort by ${LIBRARY_SORTS[sortIdx]?.label ?? 'Title'}`}
+                onPress={nextSort}
+                icon={<MaterialIcons name="sort" size={18} color={colors.primary} />}
+              />
+              <Pill
+                label={hideFinished ? 'Finished hidden' : 'Showing finished'}
+                accessibilityLabel={hideFinished ? 'Show finished books' : 'Hide finished books'}
+                onPress={toggleHideFinished}
+                icon={(
+                  <MaterialIcons
+                    name={hideFinished ? 'visibility-off' : 'visibility'}
+                    size={18}
+                    color={colors.primary}
+                  />
+                )}
+              />
             </View>
           </View>
         ) : undefined}
-        ListEmptyComponent={(
+        ListEmptyComponent={allBooks.length > 0 ? (
+          <Text style={styles.allFinished}>Every book is finished. Nice!</Text>
+        ) : (
           <View style={styles.empty}>
             <MaterialIcons name="menu-book" size={48} color={colors.primary} />
             <Text style={styles.emptyText}>No audiobooks yet.</Text>
@@ -170,6 +218,18 @@ const styles = StyleSheet.create({
   sectionCount: {
     ...type.bodyMd,
     color: colors.onSurfaceVariant,
+  },
+  listControls: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginHorizontal: spacing.margin,
+    marginBottom: spacing.sm + 4,
+  },
+  allFinished: {
+    ...type.bodyMd,
+    color: colors.onSurfaceVariant,
+    textAlign: 'center',
+    marginTop: spacing.lg,
   },
   empty: {
     alignItems: 'center',

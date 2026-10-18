@@ -81,3 +81,8 @@ export function bookEnd(book: Audiobook): Position {
   const lastIdx = book.chapters.length - 1;
   return positionInChapter(book, lastIdx, book.chapters[lastIdx].duration);
 }
+
+/** True once a position is within a second of the end of the book. */
+export function isFinished(book: Audiobook, position: Position | undefined): boolean {
+  return (position?.totalProgressTime ?? 0) >= book.duration - 1;
+}

@@ -42,7 +42,9 @@ export default function PlayerScreen() {
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>{chapterLabel}</Text>
         <Text style={styles.chapterTitle} numberOfLines={2}>{chapter.title}</Text>
-        <Text style={styles.bookTitle} numberOfLines={1}>{book.title}</Text>
+        <Text style={styles.bookTitle} numberOfLines={1}>
+          {book.author ? `${book.title} · ${book.author}` : book.title}
+        </Text>
       </View>
 
       <View style={styles.coverArea}>
