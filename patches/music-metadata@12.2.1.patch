@@ -1,0 +1,20 @@
+diff --git a/lib/mp4/MP4Parser.js b/lib/mp4/MP4Parser.js
+index b12aeb5e589b17163d2c529492ed263238a0e476..022da28662f4a167ff6bb67f6ad791dabe02c4b3 100644
+--- a/lib/mp4/MP4Parser.js
++++ b/lib/mp4/MP4Parser.js
+@@ -948,11 +948,10 @@ export class MP4Parser extends BasicParser {
+                             timeScale: chapterTrack.media.header?.timeScale ?? 0,
+                             start
+                         };
+-                        if (track.chunkOffsetTable.length > 0 &&
+-                            track.sampleToChunkTable.length > 0 &&
+-                            track.timeToSampleTable.length > 0) {
+-                            chapter.sampleOffset = this.findSampleOffset(track, offset + size);
+-                        }
++                        // Patched (audinest): sampleOffset is not computed.
++                        // findSampleOffset walks every chunk and rescans the sample-to-chunk table
++                        // per chunk, which took ~85s for a 7h M4B in Node and blocked Hermes far longer.
++                        // Chapter timing is still available from start / timeScale.
+                         if (forwardOnly) {
+                             this.streamedChapters.set(sampleIndex, chapter);
+                         }

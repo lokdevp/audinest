@@ -1,0 +1,53 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+import type { Audiobook, Position } from '@/types';
+import { initialPosition } from '@/lib/position';
+import { asyncStorage } from './storage';
+
+interface ProgressState {
+  positions: Record<string, Position>;
+  selectedId: string | null;
+  speed: number;
+  select: (id: string) => void;
+  setPosition: (id: string, position: Position) => void;
+  setSpeed: (speed: number) => void;
+  /** After a rescan: keep positions of books that still exist and are still valid, reset the rest. */
+  syncWithLibrary: (books: Audiobook[]) => void;
+}
+
+export function reconcilePositions(
+  positions: Record<string, Position>,
+  books: Audiobook[],
+): Record<string, Position> {
+  return Object.fromEntries(
+    books.map((book) => {
+      const saved = positions[book.id];
+      const valid = saved && saved.chapterIdx < book.chapters.length;
+      return [book.id, valid ? saved : initialPosition()];
+    }),
+  );
+}
+
+export const useProgress = create<ProgressState>()(
+  persist(
+    (set) => ({
+      positions: {},
+      selectedId: null,
+      speed: 1,
+      select: (id) => set({ selectedId: id }),
+      setPosition: (id, position) =>
+        set((state) => ({ positions: { ...state.positions, [id]: position } })),
+      setSpeed: (speed) => set({ speed }),
+      syncWithLibrary: (books) =>
+        set((state) => ({
+          positions: reconcilePositions(state.positions, books),
+          selectedId: books.some((book) => book.id === state.selectedId) ? state.selectedId : null,
+        })),
+    }),
+    { name: 'progress', storage: asyncStorage, version: 1 },
+  ),
+);
+
+export const getPosition = (id: string): Position =>
+  useProgress.getState().positions[id] ?? initialPosition();

@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# generated native folders (Continuous Native Generation)
+/ios
+/android
+
+# Native signing
+.kotlin/
+*.orig.*
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# editors / OS
+.idea
+.vscode/
+.DS_Store
+
+# local audiobooks used for manual testing
+test-utils/local/
