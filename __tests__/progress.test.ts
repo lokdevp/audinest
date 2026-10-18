@@ -1,4 +1,4 @@
-import { reconcilePositions } from '@/store/useProgress';
+import { pruneRecord, reconcilePositions } from '@/store/useProgress';
 import { makeBook } from '../test-utils/books';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -27,5 +27,12 @@ describe('reconcilePositions after a rescan', () => {
 
   it('drops books that are gone', () => {
     expect(result).not.toHaveProperty('removed');
+  });
+});
+
+describe('pruneRecord', () => {
+  it('keeps only entries of books that are still in the library', () => {
+    const books = [makeBook([['a.mp3', 0, 100]], 'kept'), makeBook([['b.mp3', 0, 100]], 'new')];
+    expect(pruneRecord({ kept: 1.5, removed: 2 }, books)).toEqual({ kept: 1.5 });
   });
 });

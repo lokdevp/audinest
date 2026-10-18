@@ -28,3 +28,5 @@ export interface Position {
   /** Seconds elapsed inside the whole book. */
   totalProgressTime: number;
 }
+
+export type LibrarySort = 'title' | 'recent' | 'progress';

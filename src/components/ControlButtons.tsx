@@ -4,8 +4,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, fonts, glow, radius } from '@/theme';
 
-export const SKIP_SECONDS = 20;
-
 type IconName = ComponentProps<typeof MaterialIcons>['name'];
 
 interface IconButtonProps {

@@ -12,9 +12,11 @@ import {
   positionInChapter,
   prevChapterIdx,
 } from '@/lib/position';
+import { rewindSeconds } from '@/lib/resume';
 import { useLibrary } from '@/store/useLibrary';
-import { getPosition, useProgress } from '@/store/useProgress';
+import { getPosition, getSpeed, useProgress } from '@/store/useProgress';
 import { usePlayerState } from '@/store/usePlayerState';
+import { useSettings } from '@/store/useSettings';
 
 /**
  * Single audio player shared by the whole app. Positions are stored per book as
@@ -28,6 +30,11 @@ let activeBookId: string | null = null;
 let seekTarget: number | null = null;
 let staleStatusCount = 0;
 let audioModeReady: Promise<void> | null = null;
+/** When playback last stopped, from any source (app, lock screen, headphones). */
+let pausedAt: number | null = null;
+let undoTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const UNDO_MS = 8000;
 
 const selectedBook = (): Audiobook | null => {
   const id = useProgress.getState().selectedId;
@@ -57,6 +64,12 @@ function getPlayer(): AudioPlayer {
 }
 
 function onStatus(status: AudioStatus) {
+  const wasPlaying = usePlayerState.getState().playing;
+  if (wasPlaying && !status.playing) {
+    pausedAt = Date.now();
+  } else if (status.playing) {
+    pausedAt = null;
+  }
   usePlayerState.setState({ playing: status.playing });
   const book = activeBookId ? useLibrary.getState().books[activeBookId] : undefined;
   if (!book || !loadedUri) {
@@ -105,7 +118,7 @@ async function load(uri: string, seconds: number, autoplay: boolean) {
   seekTarget = seconds;
   staleStatusCount = 0;
   await audio.seekTo(seconds);
-  audio.setPlaybackRate(useProgress.getState().speed, 'high');
+  audio.setPlaybackRate(activeBookId ? getSpeed(activeBookId) : useProgress.getState().speed, 'high');
   if (autoplay) {
     audio.play();
   }
@@ -134,7 +147,14 @@ export async function play() {
   if (position.totalProgressTime >= book.duration - 1) {
     position = chapterStart(book, 0);
     savePosition(book, position);
+  } else if (pausedAt !== null && useSettings.getState().rewindOnResume) {
+    const rewind = rewindSeconds(Date.now() - pausedAt);
+    if (rewind > 0) {
+      position = positionFromFileTime(book, position.chapterIdx, Math.max(0, fileTime(book, position) - rewind));
+      savePosition(book, position);
+    }
   }
+  pausedAt = null;
   const audio = getPlayer();
   const { uri } = book.chapters[position.chapterIdx];
   const target = fileTime(book, position);
@@ -174,10 +194,22 @@ export function skip(seconds: number) {
   moveTo(book, positionFromFileTime(book, position.chapterIdx, Math.max(0, current + seconds)));
 }
 
+/** Remembers the current position so a jump away from it can be undone for a few seconds. */
+function rememberForUndo(book: Audiobook) {
+  if (undoTimeout) {
+    clearTimeout(undoTimeout);
+  }
+  usePlayerState.setState({ undo: { bookId: book.id, position: getPosition(book.id) } });
+  undoTimeout = setTimeout(() => usePlayerState.setState({ undo: null }), UNDO_MS);
+}
+
+const isPlaying = (book: Audiobook) => usePlayerState.getState().playing && book.id === activeBookId;
+
 /** Seeks to `seconds` into the current chapter (slider). */
 export function seekInChapter(seconds: number) {
   const book = selectedBook();
   if (book) {
+    rememberForUndo(book);
     moveTo(book, positionInChapter(book, getPosition(book.id).chapterIdx, seconds));
   }
 }
@@ -185,9 +217,23 @@ export function seekInChapter(seconds: number) {
 export function goToChapter(chapterIdx: number) {
   const book = selectedBook();
   if (book) {
-    const playing = usePlayerState.getState().playing && book.id === activeBookId;
-    moveTo(book, chapterStart(book, chapterIdx), playing);
+    rememberForUndo(book);
+    moveTo(book, chapterStart(book, chapterIdx), isPlaying(book));
   }
+}
+
+/** Returns to where the last chapter jump or seek started. */
+export function undoJump() {
+  const book = selectedBook();
+  const { undo } = usePlayerState.getState();
+  if (!book || undo?.bookId !== book.id || undo.position.chapterIdx >= book.chapters.length) {
+    return;
+  }
+  if (undoTimeout) {
+    clearTimeout(undoTimeout);
+  }
+  usePlayerState.setState({ undo: null });
+  moveTo(book, undo.position, isPlaying(book));
 }
 
 export function next() {
@@ -214,9 +260,16 @@ export function prev() {
   }
 }
 
+/** Sets the speed of the selected book. */
 export function setSpeed(speed: number) {
-  useProgress.getState().setSpeed(speed);
-  player?.setPlaybackRate(speed, 'high');
+  const book = selectedBook();
+  if (!book) {
+    return;
+  }
+  useProgress.getState().setSpeed(book.id, speed);
+  if (book.id === activeBookId) {
+    player?.setPlaybackRate(speed, 'high');
+  }
 }
 
 /** Selects a book. Stops playback if a different book was playing. */
@@ -233,5 +286,6 @@ export function stop() {
   player?.clearLockScreenControls();
   loadedUri = null;
   activeBookId = null;
-  usePlayerState.setState({ playing: false });
+  pausedAt = null;
+  usePlayerState.setState({ playing: false, undo: null });
 }

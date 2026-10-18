@@ -4,16 +4,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  next, pause, play, prev, seekInChapter, setSpeed, skip,
+  next, pause, play, prev, seekInChapter, setSpeed, skip, undoJump,
 } from '@/audio/playback';
-import { IconButton, PlayButton, SKIP_SECONDS, SkipButton } from '@/components/ControlButtons';
+import { IconButton, PlayButton, SkipButton } from '@/components/ControlButtons';
 import { CoverArt } from '@/components/CoverArt';
 import { Pill } from '@/components/Pill';
 import { SliderControl } from '@/components/SliderControl';
 import { SpeedButton } from '@/components/SpeedButton';
+import { formattedTime } from '@/lib/format';
 import { usePlayerState } from '@/store/usePlayerState';
-import { useProgress } from '@/store/useProgress';
-import { useSelectedBook } from '@/store/useSelectedBook';
+import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
+import { useSettings } from '@/store/useSettings';
 import { colors, radius, spacing, type } from '@/theme';
 
 const openChapters = () => router.push('/chapters');
@@ -21,8 +22,11 @@ const openChapters = () => router.push('/chapters');
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
   const { book, position } = useSelectedBook();
-  const speed = useProgress((state) => state.speed);
+  const speed = useBookSpeed(book?.id);
   const playing = usePlayerState((state) => state.playing);
+  const undo = usePlayerState((state) => state.undo);
+  const skipBack = useSettings((state) => state.skipBack);
+  const skipForward = useSettings((state) => state.skipForward);
 
   if (!book) {
     return <Redirect href="/" />;
@@ -51,11 +55,21 @@ export default function PlayerScreen() {
         <SliderControl currentTime={position.currentTime} duration={chapter.duration} onSeek={seekInChapter} />
       </View>
 
+      <View style={styles.undo}>
+        {undo?.bookId === book.id && (
+          <Pill
+            label={`Back to ${formattedTime(undo.position.totalProgressTime)}`}
+            onPress={undoJump}
+            icon={<MaterialIcons name="undo" size={18} color={colors.primary} />}
+          />
+        )}
+      </View>
+
       <View style={styles.controls}>
         <IconButton name="skip-previous" onPress={prev} label="Previous chapter" />
-        <SkipButton seconds={-SKIP_SECONDS} onPress={() => skip(-SKIP_SECONDS)} />
+        <SkipButton seconds={-skipBack} onPress={() => skip(-skipBack)} />
         <PlayButton playing={playing} play={play} pause={pause} />
-        <SkipButton seconds={SKIP_SECONDS} onPress={() => skip(SKIP_SECONDS)} />
+        <SkipButton seconds={skipForward} onPress={() => skip(skipForward)} />
         <IconButton name="skip-next" onPress={next} label="Next chapter" />
       </View>
 
@@ -132,11 +146,18 @@ const styles = StyleSheet.create({
     ...type.labelMd,
     color: colors.primary,
   },
+  undo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+    marginTop: spacing.sm,
+  },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: spacing.lg,
+    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
   },
   tray: {
     flexDirection: 'row',

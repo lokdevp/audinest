@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, type } from '@/theme';
 import type { Audiobook, Position } from '@/types';
 import { AudiobookProgress } from './AudiobookProgress';
-import { PlayButton, SKIP_SECONDS, SkipIcon } from './ControlButtons';
+import { PlayButton, SkipIcon } from './ControlButtons';
 import { CoverArt } from './CoverArt';
 
 export const MINI_PLAYER_HEIGHT = 84;
@@ -15,12 +15,15 @@ interface Props {
   play: () => void;
   pause: () => void;
   skip: (seconds: number) => void;
+  skipSeconds: number;
   onOpen: () => void;
   bottomInset: number;
 }
 
 /** Floating now-playing bar at the bottom of the library. */
-export function MiniPlayer({ book, position, playing, play, pause, skip, onOpen, bottomInset }: Props) {
+export function MiniPlayer({
+  book, position, playing, play, pause, skip, skipSeconds, onOpen, bottomInset,
+}: Props) {
   return (
     <View style={[styles.wrapper, { bottom: bottomInset + spacing.sm }]}>
       <Pressable
@@ -39,13 +42,13 @@ export function MiniPlayer({ book, position, playing, play, pause, skip, onOpen,
             </Text>
           </View>
           <Pressable
-            onPress={() => skip(SKIP_SECONDS)}
+            onPress={() => skip(skipSeconds)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`Forward ${SKIP_SECONDS} seconds`}
+            accessibilityLabel={`Forward ${skipSeconds} seconds`}
             style={styles.skip}
           >
-            <SkipIcon seconds={SKIP_SECONDS} size={28} color={colors.onSurfaceVariant} />
+            <SkipIcon seconds={skipSeconds} size={28} color={colors.onSurfaceVariant} />
           </Pressable>
           <PlayButton playing={playing} play={play} pause={pause} size={48} />
         </View>

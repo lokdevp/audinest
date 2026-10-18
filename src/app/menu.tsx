@@ -6,7 +6,38 @@ import { Pill } from '@/components/Pill';
 import { loadLibrary, pickLibraryFolder } from '@/store/libraryActions';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
+import { SKIP_OPTIONS, useSettings } from '@/store/useSettings';
 import { colors, radius, spacing, type } from '@/theme';
+
+const nextSkip = (seconds: number) => SKIP_OPTIONS[(SKIP_OPTIONS.indexOf(seconds) + 1) % SKIP_OPTIONS.length];
+
+function PlaybackSettings() {
+  const settings = useSettings();
+  return (
+    <View style={styles.card}>
+      <Text style={styles.eyebrow}>Playback</Text>
+      <Text style={styles.heading}>Controls</Text>
+      <Text style={styles.text}>Tap a setting to change it.</Text>
+      <View style={styles.buttons}>
+        <Pill
+          label={`Skip back ${settings.skipBack} s`}
+          onPress={() => settings.setSkipBack(nextSkip(settings.skipBack))}
+          icon={<MaterialIcons name="replay" size={18} color={colors.primary} />}
+        />
+        <Pill
+          label={`Skip forward ${settings.skipForward} s`}
+          onPress={() => settings.setSkipForward(nextSkip(settings.skipForward))}
+          icon={<MaterialIcons name="forward-30" size={18} color={colors.primary} />}
+        />
+        <Pill
+          label={`Rewind on resume: ${settings.rewindOnResume ? 'On' : 'Off'}`}
+          onPress={() => settings.setRewindOnResume(!settings.rewindOnResume)}
+          icon={<MaterialIcons name="history" size={18} color={colors.primary} />}
+        />
+      </View>
+    </View>
+  );
+}
 
 export default function MenuScreen() {
   const libraryUri = useLibrary((state) => state.libraryUri);
@@ -62,6 +93,7 @@ export default function MenuScreen() {
           </View>
         )}
       </View>
+      <PlaybackSettings />
     </ScrollView>
   );
 }

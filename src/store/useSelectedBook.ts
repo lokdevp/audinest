@@ -12,3 +12,8 @@ export function useSelectedBook() {
   const book = useLibrary((state) => (selectedId ? state.books[selectedId] : undefined));
   return { book, position };
 }
+
+/** Playback speed of a book, falling back to the default speed. */
+export function useBookSpeed(id: string | undefined) {
+  return useProgress((state) => (id && state.speeds[id]) || state.speed);
+}

@@ -12,7 +12,8 @@ import { ResumeCard } from '@/components/ResumeCard';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useProgress } from '@/store/useProgress';
-import { useSelectedBook } from '@/store/useSelectedBook';
+import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
+import { useSettings } from '@/store/useSettings';
 import { colors, fonts, spacing, type } from '@/theme';
 
 const openPlayer = () => router.push('/player');
@@ -31,9 +32,10 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const booksById = useLibrary((state) => state.books);
   const positions = useProgress((state) => state.positions);
-  const speed = useProgress((state) => state.speed);
   const playing = usePlayerState((state) => state.playing);
+  const skipForward = useSettings((state) => state.skipForward);
   const { book: current, position } = useSelectedBook();
+  const speed = useBookSpeed(current?.id);
   const books = useMemo(
     () =>
       Object.values(booksById).sort((a, b) =>
@@ -117,6 +119,7 @@ export default function LibraryScreen() {
           play={play}
           pause={pause}
           skip={skip}
+          skipSeconds={skipForward}
           onOpen={openPlayer}
           bottomInset={insets.bottom}
         />
