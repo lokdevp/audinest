@@ -13,6 +13,7 @@ import {
   prevChapterIdx,
 } from '@/lib/position';
 import { rewindSeconds } from '@/lib/resume';
+import { sleepRemainingMs, sleepVolume } from '@/lib/sleep';
 import { useLibrary } from '@/store/useLibrary';
 import { getPosition, getSpeed, useProgress } from '@/store/useProgress';
 import { usePlayerState } from '@/store/usePlayerState';
@@ -63,6 +64,36 @@ function getPlayer(): AudioPlayer {
   return player;
 }
 
+/** Freezes a minutes sleep timer while paused and restarts it when playback resumes. */
+function syncSleepTimer(wasPlaying: boolean, playing: boolean) {
+  const { sleep } = usePlayerState.getState();
+  if (sleep?.kind !== 'minutes' || wasPlaying === playing) {
+    return;
+  }
+  const now = Date.now();
+  usePlayerState.setState({
+    sleep: playing
+      ? { ...sleep, endsAt: now + sleep.remainingMs }
+      : { ...sleep, endsAt: null, remainingMs: sleepRemainingMs(sleep, now) },
+  });
+}
+
+/** Fades out over the last seconds of a minutes sleep timer, then pauses. */
+function tickSleepTimer(audio: AudioPlayer) {
+  const { sleep } = usePlayerState.getState();
+  if (sleep?.kind !== 'minutes' || sleep.endsAt === null) {
+    return;
+  }
+  const remaining = sleepRemainingMs(sleep, Date.now());
+  if (remaining > 0) {
+    audio.volume = sleepVolume(remaining);
+    return;
+  }
+  audio.pause();
+  audio.volume = 1;
+  usePlayerState.setState({ sleep: null });
+}
+
 function onStatus(status: AudioStatus) {
   const wasPlaying = usePlayerState.getState().playing;
   if (wasPlaying && !status.playing) {
@@ -70,7 +101,11 @@ function onStatus(status: AudioStatus) {
   } else if (status.playing) {
     pausedAt = null;
   }
+  syncSleepTimer(wasPlaying, status.playing);
   usePlayerState.setState({ playing: status.playing });
+  if (status.playing && player) {
+    tickSleepTimer(player);
+  }
   const book = activeBookId ? useLibrary.getState().books[activeBookId] : undefined;
   if (!book || !loadedUri) {
     return;
@@ -94,19 +129,31 @@ function onStatus(status: AudioStatus) {
   if (book.chapters[position.chapterIdx]?.uri !== loadedUri) {
     return;
   }
-  savePosition(book, positionFromFileTime(book, position.chapterIdx, status.currentTime));
+  const next = positionFromFileTime(book, position.chapterIdx, status.currentTime);
+  if (next.chapterIdx > position.chapterIdx && usePlayerState.getState().sleep?.kind === 'chapter') {
+    // Playback ran into the next chapter: stop at its start (status updates come once a second).
+    usePlayerState.setState({ sleep: null });
+    player?.pause();
+    moveTo(book, chapterStart(book, next.chapterIdx));
+    return;
+  }
+  savePosition(book, next);
 }
 
 /** The loaded file ended: continue with the next file of the book, or stop at the end. */
 function onFileFinished(book: Audiobook) {
   const nextIdx = nextFileChapterIdx(book, getPosition(book.id).chapterIdx);
+  const stopAtChapter = usePlayerState.getState().sleep?.kind === 'chapter';
+  if (stopAtChapter) {
+    usePlayerState.setState({ sleep: null });
+  }
   if (nextIdx === -1) {
     savePosition(book, bookEnd(book));
     usePlayerState.setState({ playing: false });
     return;
   }
   savePosition(book, chapterStart(book, nextIdx));
-  load(book.chapters[nextIdx].uri, book.chapters[nextIdx].startTime, true);
+  load(book.chapters[nextIdx].uri, book.chapters[nextIdx].startTime, !stopAtChapter);
 }
 
 async function load(uri: string, seconds: number, autoplay: boolean) {
@@ -280,6 +327,22 @@ export function selectBook(id: string) {
   useProgress.getState().select(id);
 }
 
+/** Starts a sleep timer of `minutes`, stops at the end of the chapter, or (null) cancels it. */
+export function setSleepTimer(choice: number | 'chapter' | null) {
+  if (player) {
+    player.volume = 1;
+  }
+  if (choice === null || choice === 'chapter') {
+    usePlayerState.setState({ sleep: choice && { kind: 'chapter' } });
+    return;
+  }
+  const remainingMs = choice * 60_000;
+  const { playing } = usePlayerState.getState();
+  usePlayerState.setState({
+    sleep: { kind: 'minutes', remainingMs, endsAt: playing ? Date.now() + remainingMs : null },
+  });
+}
+
 /** Stops playback before the library is replaced by a rescan. */
 export function stop() {
   player?.pause();
@@ -287,5 +350,8 @@ export function stop() {
   loadedUri = null;
   activeBookId = null;
   pausedAt = null;
-  usePlayerState.setState({ playing: false, undo: null });
+  if (player) {
+    player.volume = 1;
+  }
+  usePlayerState.setState({ playing: false, undo: null, sleep: null });
 }

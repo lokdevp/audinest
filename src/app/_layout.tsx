@@ -40,6 +40,7 @@ export default function RootLayout() {
           <Stack.Screen name="player" options={{ title: 'Now Playing' }} />
           <Stack.Screen name="chapters" options={{ title: 'Chapters' }} />
           <Stack.Screen name="menu" options={{ title: 'Menu' }} />
+          <Stack.Screen name="sleep" options={{ title: 'Sleep timer', presentation: 'modal' }} />
         </Stack>
       ) : (
         <View style={styles.loading}>

@@ -15,9 +15,11 @@ import { formattedTime } from '@/lib/format';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
 import { useSettings } from '@/store/useSettings';
+import { useSleepLabel } from '@/store/useSleepLabel';
 import { colors, radius, spacing, type } from '@/theme';
 
 const openChapters = () => router.push('/chapters');
+const openSleep = () => router.push('/sleep');
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
@@ -25,6 +27,7 @@ export default function PlayerScreen() {
   const speed = useBookSpeed(book?.id);
   const playing = usePlayerState((state) => state.playing);
   const undo = usePlayerState((state) => state.undo);
+  const sleepLabel = useSleepLabel();
   const skipBack = useSettings((state) => state.skipBack);
   const skipForward = useSettings((state) => state.skipForward);
 
@@ -75,6 +78,12 @@ export default function PlayerScreen() {
 
       <View style={[styles.card, styles.tray]}>
         <SpeedButton speed={speed} onChange={setSpeed} />
+        <Pill
+          label={sleepLabel ?? 'Sleep'}
+          onPress={openSleep}
+          accessibilityLabel="Sleep timer"
+          icon={<MaterialIcons name="bedtime" size={18} color={colors.primary} />}
+        />
         <Pill
           label="Chapters"
           onPress={openChapters}
