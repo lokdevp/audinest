@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Pill } from '@/components/Pill';
+import { folderLabel } from '@/lib/format';
 import { loadLibrary, pickLibraryFolder } from '@/store/libraryActions';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
@@ -66,7 +67,7 @@ export default function MenuScreen() {
         </Text>
         {libraryUri && (
           <Text style={styles.path} numberOfLines={2}>
-            {decodeURIComponent(libraryUri)}
+            {folderLabel(libraryUri)}
           </Text>
         )}
         {scan ? (

@@ -1,4 +1,4 @@
-import { formattedDuration, formattedTime } from '@/lib/format';
+import { folderLabel, formattedDuration, formattedTime } from '@/lib/format';
 
 describe('formattedTime', () => {
   it('formats minutes and seconds', () => {
@@ -31,5 +31,34 @@ describe('formattedDuration', () => {
   it('treats missing or negative values as zero', () => {
     expect(formattedDuration(NaN)).toBe('0s');
     expect(formattedDuration(-5)).toBe('0s');
+  });
+});
+
+describe('folderLabel', () => {
+  const tree = 'content://com.android.externalstorage.documents/tree/';
+
+  it('names internal storage and joins the path', () => {
+    expect(folderLabel(`${tree}primary%3AAudiobooks`)).toBe('Internal storage › Audiobooks');
+    expect(folderLabel(`${tree}primary%3AAudiobooks%2FKids`)).toBe('Internal storage › Audiobooks › Kids');
+    expect(folderLabel(`${tree}primary:Audiobooks/`)).toBe('Internal storage › Audiobooks');
+  });
+
+  it('ignores a document part', () => {
+    expect(folderLabel(`${tree}primary%3AAudiobooks/document/primary%3AAudiobooks%2FDune`))
+      .toBe('Internal storage › Audiobooks');
+  });
+
+  it('shows only the volume for its root', () => {
+    expect(folderLabel(`${tree}primary%3A`)).toBe('Internal storage');
+  });
+
+  it('names SD cards and the Documents root', () => {
+    expect(folderLabel(`${tree}1A2B-3C4D%3ABooks`)).toBe('SD card › Books');
+    expect(folderLabel(`${tree}home%3AAudio`)).toBe('Documents › Audio');
+  });
+
+  it('falls back for other providers and plain strings', () => {
+    expect(folderLabel('content://com.android.providers.downloads.documents/tree/downloads')).toBe('downloads');
+    expect(folderLabel('file:///sdcard/My%20Books')).toBe('file:///sdcard/My Books');
   });
 });
