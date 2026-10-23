@@ -48,7 +48,7 @@ export default function PlayerScreen() {
       </View>
 
       <View style={styles.coverArea}>
-        <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={32} fullTitle />
+        <CoverArt uri={book.coverUri} title={book.title} author={book.author} style={styles.cover} fontSize={32} fullTitle />
       </View>
 
       <View style={styles.card}>

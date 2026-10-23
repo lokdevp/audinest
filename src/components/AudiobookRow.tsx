@@ -27,7 +27,7 @@ export const AudiobookRow = memo(function AudiobookRow({ book, position, selecte
       onLongPress={onLongPress && (() => onLongPress(book.id))}
     >
       {selected && <View style={styles.accent} />}
-      <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={28} />
+      <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={24} />
       <View style={styles.status}>
         <View>
           <Text style={[styles.title, selected && styles.titleSelected]} numberOfLines={2}>

@@ -34,7 +34,7 @@ export function MiniPlayer({
       >
         <AudiobookProgress progress={position.totalProgressTime} duration={book.duration} style={styles.progress} />
         <View style={styles.row}>
-          <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={20} />
+          <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={16} />
           <View style={styles.info}>
             <Text style={styles.title} numberOfLines={1}>{book.title}</Text>
             <Text style={styles.subtitle} numberOfLines={1}>

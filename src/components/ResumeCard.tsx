@@ -27,7 +27,7 @@ export function ResumeCard({ book, position, speed, playing, play, pause, onOpen
       accessibilityLabel={`Open ${book.title}`}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={36} />
+      <CoverArt uri={book.coverUri} title={book.title} author={book.author} style={styles.cover} fontSize={16} fullTitle />
       <View style={styles.info}>
         <View style={styles.badges}>
           <View style={styles.badge}>
