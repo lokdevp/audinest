@@ -3,12 +3,12 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import type { Audiobook, BookType, Chapter } from '@/types';
 import { probeDuration } from '@/audio/probe';
-import { readFileMetadata, stripExtension, type FileMetadata } from './metadata';
+import { readFileMetadata, stripExtension, withDuration, type FileMetadata } from './metadata';
 
 const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'bmp', 'webp'];
 const AUDIO_TYPES = [
-  '3gp', 'aac', 'awb', 'flac', 'imy', 'm4a', 'm4b', 'mid', 'mka', 'mkv', 'mp3', 'mp3package',
-  'mp4', 'opus', 'mxmf', 'oga', 'ogg', 'ota', 'rtttl', 'rtx', 'wav', 'webm', 'wma', 'xmf',
+  '3gp', 'aac', 'awb', 'flac', 'm4a', 'm4b', 'mka', 'mkv', 'mp3', 'mp4', 'opus', 'oga', 'ogg', 'wav',
+  'webm', 'wma',
 ];
 
 export interface Entry {
@@ -32,8 +32,10 @@ export interface ParsedFile {
 }
 
 const extension = (name: string) => name.match(/\.([^/.]+)$/)?.[1]?.toLowerCase() ?? '';
-export const isAudio = (name: string) => AUDIO_TYPES.includes(extension(name));
-export const isImage = (name: string) => IMAGE_TYPES.includes(extension(name));
+// Hidden files, such as the `._name.mp3` files macOS leaves on copied folders, aren't audio.
+const isHidden = (name: string) => name.startsWith('.');
+export const isAudio = (name: string) => !isHidden(name) && AUDIO_TYPES.includes(extension(name));
+export const isImage = (name: string) => !isHidden(name) && IMAGE_TYPES.includes(extension(name));
 const isM4b = (name: string) => extension(name) === 'm4b';
 
 const byName = (a: Entry, b: Entry) =>
@@ -122,21 +124,27 @@ const coverDirectory = () => {
   return dir;
 };
 
+/** Saves the book's cover, or returns null if it has none or it can't be saved. */
 async function saveCover(source: BookSource, files: ParsedFile[]): Promise<string | null> {
   const picture = files.find(({ metadata }) => metadata.picture)?.metadata.picture;
   if (!picture && !source.image) {
     return null;
   }
-  const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, source.id);
-  const ext = picture ? (picture.format.split('/')[1] ?? 'jpg') : extension(source.image!.name);
-  // Unique name per scan, so expo-image / Image don't show a stale cached cover after a rescan.
-  const cover = new File(coverDirectory(), `${hash}-${Date.now()}.${ext}`);
-  if (picture) {
-    await cover.write(picture.data);
-  } else {
-    await new File(source.image!.uri).copy(cover);
+  try {
+    const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, source.id);
+    const ext = picture ? (picture.format.split('/')[1] ?? 'jpg') : extension(source.image!.name);
+    // Unique name per scan, so expo-image / Image don't show a stale cached cover after a rescan.
+    const cover = new File(coverDirectory(), `${hash}-${Date.now()}.${ext}`);
+    if (picture) {
+      await cover.write(picture.data);
+    } else {
+      await new File(source.image!.uri).copy(cover);
+    }
+    return cover.uri;
+  } catch (error) {
+    console.warn(`Can't save the cover of ${source.name}:`, error);
+    return null;
   }
-  return cover.uri;
 }
 
 export interface FileStamp {
@@ -175,15 +183,41 @@ function reusable(previous: Audiobook | undefined, fingerprint: string | null): 
   );
 }
 
+/**
+ * Reads one file's metadata. If its tags can't be read (a format music-metadata doesn't know, or a
+ * damaged file), the platform player is asked for its duration. Returns null if it can't play it either.
+ */
+async function parseFile(entry: Entry, withCover: boolean): Promise<FileMetadata | null> {
+  let metadata: FileMetadata;
+  let tagsRead = true;
+  try {
+    metadata = await readFileMetadata(new File(entry.uri), { withCover });
+  } catch (error) {
+    console.warn(`Can't read the tags of ${entry.name}:`, error);
+    tagsRead = false;
+    metadata = {
+      album: null, author: null, trackTitle: stripExtension(entry.name), duration: 0, chapters: [], picture: null,
+    };
+  }
+  if (metadata.duration <= 0) {
+    metadata = withDuration(metadata, await probeDuration(entry.uri));
+  }
+  return tagsRead || metadata.duration > 0 ? metadata : null;
+}
+
 async function parseSource(source: BookSource): Promise<Audiobook> {
   const files: ParsedFile[] = [];
   // Read sequentially: SAF reads are slow and parallel reads of many files exhaust memory.
-  for (const [idx, entry] of source.audio.entries()) {
-    const metadata = await readFileMetadata(new File(entry.uri), { withCover: idx === 0 });
-    if (metadata.duration <= 0) {
-      metadata.duration = await probeDuration(entry.uri);
+  for (const entry of source.audio) {
+    const metadata = await parseFile(entry, files.length === 0);
+    if (metadata) {
+      files.push({ entry, metadata });
+    } else {
+      console.warn(`Skipping unreadable file ${entry.name}`);
     }
-    files.push({ entry, metadata });
+  }
+  if (files.length === 0) {
+    throw new Error('No readable audio files');
   }
   return assembleAudiobook(source, files, await saveCover(source, files));
 }
@@ -194,24 +228,29 @@ export interface ScanProgress {
 }
 
 /**
- * Scans the library directory. A book that fails to parse is logged and skipped. Books in `previous`
- * whose files haven't changed are reused without reading their files.
+ * Scans the library directory. Books in `previous` whose files haven't changed are reused without
+ * reading their files, unless `full` is set. A book that fails to parse keeps its previous version
+ * (so its progress isn't lost to a temporary read error), or is skipped if it is new.
  */
 export async function scanLibrary(
   libraryUri: string,
   onProgress: (progress: ScanProgress) => void,
   previous: Record<string, Audiobook> = {},
+  { full = false } = {},
 ): Promise<Audiobook[]> {
   const sources = classifyEntries(listDirectory({ name: '', uri: libraryUri, isDirectory: true }), listDirectory);
   const books: Audiobook[] = [];
   onProgress({ done: 0, total: sources.length });
   for (const [idx, source] of sources.entries()) {
+    const known = previous[source.id];
     try {
       const fingerprint = fingerprintSource(source);
-      const known = previous[source.id];
-      books.push(reusable(known, fingerprint) ? known : { ...(await parseSource(source)), fingerprint });
+      books.push(!full && reusable(known, fingerprint) ? known : { ...(await parseSource(source)), fingerprint });
     } catch (error) {
-      console.warn(`Skipping ${source.name}:`, error);
+      console.warn(`Can't read ${source.name}:`, error);
+      if (known) {
+        books.push(known);
+      }
     }
     onProgress({ done: idx + 1, total: sources.length });
   }

@@ -1,4 +1,5 @@
 import { scanLibrary } from '@/lib/scan';
+import { probeDuration } from '@/audio/probe';
 import { readFileMetadata } from '@/lib/metadata';
 import type { Audiobook } from '@/types';
 
@@ -39,6 +40,7 @@ jest.mock('@/lib/metadata', () => ({
 }));
 
 const parse = readFileMetadata as jest.Mock;
+const mockProbe = probeDuration as jest.Mock;
 
 beforeEach(() => {
   Object.assign(mockTree, { root: ['root/A.mp3', 'root/B.mp3'] });
@@ -47,6 +49,7 @@ beforeEach(() => {
     'root/B.mp3': { size: 200, modificationTime: 2 },
   });
   parse.mockClear();
+  mockProbe.mockReset();
 });
 
 const byId = (books: Audiobook[]) => Object.fromEntries(books.map((book) => [book.id, book]));
@@ -76,4 +79,50 @@ it('parses again when a file has no modification time', async () => {
   mockStamps['root/A.mp3'] = { size: 100 } as never;
   await scanLibrary('root', () => {}, first);
   expect(parse).toHaveBeenCalledTimes(1);
+});
+
+it('parses every book on a full rescan', async () => {
+  const first = byId(await scanLibrary('root', () => {}));
+  parse.mockClear();
+  await scanLibrary('root', () => {}, first, { full: true });
+  expect(parse).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the previous version of a book that fails to parse', async () => {
+  const first = byId(await scanLibrary('root', () => {}));
+  parse.mockRejectedValueOnce(new Error('EIO'));
+  mockProbe.mockResolvedValueOnce(0);
+
+  const books = await scanLibrary('root', () => {}, first, { full: true });
+  expect(books.map((book) => book.id)).toEqual(['root/A.mp3', 'root/B.mp3']);
+  expect(books[0]).toBe(first['root/A.mp3']);
+});
+
+it('skips a new book that fails to parse', async () => {
+  parse.mockRejectedValueOnce(new Error('EIO'));
+  mockProbe.mockResolvedValueOnce(0);
+  const books = await scanLibrary('root', () => {});
+  expect(books.map((book) => book.id)).toEqual(['root/B.mp3']);
+});
+
+describe('a folder with a file whose tags cannot be read', () => {
+  beforeEach(() => {
+    mockTree.root = ['root/Book'];
+    mockTree['root/Book'] = ['root/Book/1.mp3', 'root/Book/2.mp3', 'root/Book/3.mp3'];
+    parse
+      .mockResolvedValueOnce({ album: null, author: null, trackTitle: 'One', duration: 10, chapters: [], picture: null })
+      .mockRejectedValueOnce(new Error('CouldNotDetermineFileTypeError'));
+  });
+
+  it('asks the player for the duration of that file', async () => {
+    mockProbe.mockResolvedValueOnce(20);
+    const [book] = await scanLibrary('root', () => {});
+    expect(book.chapters.map((chapter) => [chapter.title, chapter.duration])).toEqual([['One', 10], ['2', 20], ['Track', 10]]);
+  });
+
+  it('skips only that file if the player cannot read it either', async () => {
+    mockProbe.mockResolvedValueOnce(0);
+    const [book] = await scanLibrary('root', () => {});
+    expect(book.chapters.map((chapter) => chapter.uri)).toEqual(['root/Book/1.mp3', 'root/Book/3.mp3']);
+  });
 });

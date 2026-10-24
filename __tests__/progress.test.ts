@@ -28,6 +28,19 @@ describe('reconcilePositions after a rescan', () => {
   it('drops books that are gone', () => {
     expect(result).not.toHaveProperty('removed');
   });
+  it('fits a kept chapter index to the new chapter lengths', () => {
+    const shorter = makeBook([['a.mp3', 0, 30]], 'kept');
+    expect(reconcilePositions(saved, [shorter]).kept).toEqual({ chapterIdx: 0, currentTime: 30, totalProgressTime: 30 });
+  });
+
+  it('carries a position over by book time when its chapter is gone', () => {
+    const rechaptered = makeBook([['b.mp3', 0, 400], ['b.mp3', 400, 200]], 'shrunk');
+    expect(reconcilePositions(saved, [rechaptered]).shrunk).toEqual({
+      chapterIdx: 1,
+      currentTime: 101,
+      totalProgressTime: 501,
+    });
+  });
 });
 
 describe('pruneRecord', () => {

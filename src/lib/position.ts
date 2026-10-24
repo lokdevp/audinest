@@ -2,6 +2,12 @@ import type { Audiobook, Position } from '@/types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+/**
+ * Android truncates seek targets to whole milliseconds, so after seeking to a chapter start the player
+ * can report a time just before it. Times this close to a chapter start count as inside the chapter.
+ */
+const CHAPTER_START_TOLERANCE = 0.25;
+
 export const initialPosition = (): Position => ({
   chapterIdx: 0,
   currentTime: 0,
@@ -18,10 +24,10 @@ export function chapterStart(book: Audiobook, chapterIdx: number): Position {
   };
 }
 
-/** Position `seconds` into the given chapter, clamped to the chapter length. */
+/** Position `seconds` into the given chapter, clamped to the chapter length if that is known. */
 export function positionInChapter(book: Audiobook, chapterIdx: number, seconds: number): Position {
   const chapter = book.chapters[chapterIdx];
-  const currentTime = clamp(seconds, 0, chapter.duration);
+  const currentTime = chapter.duration > 0 ? clamp(seconds, 0, chapter.duration) : Math.max(seconds, 0);
   return {
     chapterIdx,
     currentTime,
@@ -40,14 +46,36 @@ export function positionFromFileTime(book: Audiobook, chapterIdx: number, second
   while (
     idx + 1 < book.chapters.length &&
     book.chapters[idx + 1].uri === uri &&
-    seconds >= book.chapters[idx + 1].startTime
+    seconds >= book.chapters[idx + 1].startTime - CHAPTER_START_TOLERANCE
   ) {
     idx += 1;
   }
-  while (idx > 0 && book.chapters[idx - 1].uri === uri && seconds < book.chapters[idx].startTime) {
+  while (
+    idx > 0 &&
+    book.chapters[idx - 1].uri === uri &&
+    seconds < book.chapters[idx].startTime - CHAPTER_START_TOLERANCE
+  ) {
     idx -= 1;
   }
   return positionInChapter(book, idx, seconds - book.chapters[idx].startTime);
+}
+
+/**
+ * Position `seconds` into the whole book, or null if that is past its end. Used to carry a position
+ * over when a rescan changed the book's chapters.
+ */
+export function positionAtBookTime(book: Audiobook, seconds: number): Position | null {
+  if (seconds < 0 || seconds >= book.duration) {
+    return null;
+  }
+  // The first chapter starts at 0, so some chapter always matches.
+  const idx = book.chapters.findLastIndex((chapter) => chapter.totalProgressTime <= seconds);
+  return positionInChapter(book, idx, seconds - book.chapters[idx].totalProgressTime);
+}
+
+/** The saved position if it still fits the book's chapters, else the start of the book. */
+export function validPosition(book: Audiobook, position: Position | undefined): Position {
+  return position && position.chapterIdx < book.chapters.length ? position : initialPosition();
 }
 
 /** Seconds inside the chapter's file that a position corresponds to. */
@@ -82,7 +110,7 @@ export function bookEnd(book: Audiobook): Position {
   return positionInChapter(book, lastIdx, book.chapters[lastIdx].duration);
 }
 
-/** True once a position is within a second of the end of the book. */
+/** True once a position is within a second of the end of the book. Never true if its length is unknown. */
 export function isFinished(book: Audiobook, position: Position | undefined): boolean {
-  return (position?.totalProgressTime ?? 0) >= book.duration - 1;
+  return book.duration > 0 && (position?.totalProgressTime ?? 0) >= book.duration - 1;
 }

@@ -39,7 +39,8 @@ pnpm start          # then scan the QR code with Expo Go on an Android phone
 ```
 
 The app only uses modules bundled with Expo Go. Background playback and lock-screen controls
-need a development or release build:
+need a development or release build. In Expo Go, Android stops the audio about 3 minutes after
+the app leaves the screen, so use a build for real listening:
 
 ```sh
 npx expo run:android                              # local dev build (needs the Android SDK)

@@ -5,11 +5,13 @@ import {
   isFinished,
   nextChapterIdx,
   nextFileChapterIdx,
+  positionAtBookTime,
   positionFromFileTime,
   positionInChapter,
   prevChapterIdx,
+  validPosition,
 } from '@/lib/position';
-import { multiFileBook, singleFileBook } from '../test-utils/books';
+import { makeBook, multiFileBook, singleFileBook } from '../test-utils/books';
 
 describe('positionFromFileTime', () => {
   it('stays in the chapter while the time is inside it', () => {
@@ -107,5 +109,58 @@ describe('isFinished', () => {
 
   it('is false without a saved position', () => {
     expect(isFinished(book, undefined)).toBe(false);
+  });
+
+  it('is false when the book length is unknown', () => {
+    const unknown = makeBook([['a.mp3', 0, 0]]);
+    expect(isFinished(unknown, { chapterIdx: 0, currentTime: 0, totalProgressTime: 0 })).toBe(false);
+  });
+});
+
+describe('chapter start tolerance', () => {
+  it('stays in a chapter when a seek to its start lands just before it', () => {
+    expect(positionFromFileTime(singleFileBook(), 1, 99.9995)).toEqual({
+      chapterIdx: 1,
+      currentTime: 0,
+      totalProgressTime: 100,
+    });
+  });
+
+  it('still moves back for times clearly before the chapter', () => {
+    expect(positionFromFileTime(singleFileBook(), 1, 99.5).chapterIdx).toBe(0);
+  });
+});
+
+describe('unknown chapter length', () => {
+  it('does not clamp the position to a duration of 0', () => {
+    const book = makeBook([['a.mp3', 0, 0]]);
+    expect(positionInChapter(book, 0, 42)).toEqual({ chapterIdx: 0, currentTime: 42, totalProgressTime: 42 });
+  });
+});
+
+describe('positionAtBookTime', () => {
+  it('finds the chapter that contains a time in the book', () => {
+    expect(positionAtBookTime(multiFileBook(), 130)).toEqual({
+      chapterIdx: 2,
+      currentTime: 30,
+      totalProgressTime: 130,
+    });
+  });
+
+  it('is null past the end of the book', () => {
+    expect(positionAtBookTime(multiFileBook(), 220)).toBeNull();
+  });
+});
+
+describe('validPosition', () => {
+  it('replaces a chapter index past the end of the book with the start', () => {
+    const book = singleFileBook();
+    const saved = { chapterIdx: 1, currentTime: 5, totalProgressTime: 105 };
+    expect(validPosition(book, saved)).toBe(saved);
+    expect(validPosition(book, { ...saved, chapterIdx: 3 })).toEqual({
+      chapterIdx: 0,
+      currentTime: 0,
+      totalProgressTime: 0,
+    });
   });
 });

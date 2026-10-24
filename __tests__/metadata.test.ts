@@ -3,7 +3,7 @@ import { join } from 'path';
 import { parseFromTokenizer } from 'music-metadata';
 
 import { FileHandleTokenizer, type RandomAccessHandle } from '@/lib/fileTokenizer';
-import { toFileMetadata } from '@/lib/metadata';
+import { toFileMetadata, withDuration } from '@/lib/metadata';
 
 jest.mock('expo-file-system', () => ({}));
 
@@ -62,5 +62,11 @@ describe('metadata parsing through FileHandleTokenizer', () => {
   it('falls back to the file name when there are no tags', () => {
     const metadata = toFileMetadata({ common: {}, format: {} } as never, '03 - Untitled.mp3');
     expect(metadata).toMatchObject({ album: null, trackTitle: '03 - Untitled', duration: 0 });
+  });
+  it('fits the last chapter to a duration found later', () => {
+    const format = { chapters: [{ title: 'One', start: 0 }, { title: 'Two', start: 60 }] };
+    const metadata = withDuration(toFileMetadata({ common: {}, format } as never, 'book.mp3'), 150);
+    expect(metadata.duration).toBe(150);
+    expect(metadata.chapters.map((chapter) => chapter.duration)).toEqual([60, 90]);
   });
 });

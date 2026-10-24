@@ -25,6 +25,8 @@ describe('classifyEntries', () => {
       file('track 2.mp3', 'root/Mp3 Book'),
       file('cover.jpg', 'root/Mp3 Book'),
       file('notes.txt', 'root/Mp3 Book'),
+      file('._track 2.mp3', 'root/Mp3 Book'),
+      file('ringtone.mid', 'root/Mp3 Book'),
     ],
     'root/Empty': [file('readme.txt', 'root/Empty')],
   };
@@ -37,7 +39,7 @@ describe('classifyEntries', () => {
     expect(sources.map((source) => source.name)).toEqual(['Mp3 Book', 'Single.M4B']);
   });
 
-  it('sorts directory files in natural order and picks the cover image', () => {
+  it('sorts directory files in natural order, ignores hidden and non-book files, and picks the cover', () => {
     const [mp3Book] = sources;
     expect(mp3Book.audio.map((entry) => entry.name)).toEqual(['track 2.mp3', 'track 10.mp3']);
     expect(mp3Book.image?.name).toBe('cover.jpg');

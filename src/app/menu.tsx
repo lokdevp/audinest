@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Pill } from '@/components/Pill';
 import { folderLabel } from '@/lib/format';
@@ -45,7 +45,16 @@ export default function MenuScreen() {
   const scan = usePlayerState((state) => state.scan);
 
   const scanAndReturn = async (uri: string, full = false) => {
-    await loadLibrary(uri, { full });
+    try {
+      await loadLibrary(uri, { full });
+    } catch (error) {
+      console.warn('Scan failed', error);
+      Alert.alert(
+        "Can't read the folder",
+        'It may have been moved, or the app lost access to it. Pick the folder again.',
+      );
+      return;
+    }
     router.back();
   };
 

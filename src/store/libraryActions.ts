@@ -29,8 +29,8 @@ export async function loadLibrary(libraryUri: string, { full = false } = {}) {
   usePlayerState.setState({ scan: { done: 0, total: 0 } });
   try {
     const library = useLibrary.getState();
-    const previous = !full && library.libraryUri === libraryUri ? library.books : {};
-    const books = await scanLibrary(libraryUri, (scan) => usePlayerState.setState({ scan }), previous);
+    const previous = library.libraryUri === libraryUri ? library.books : {};
+    const books = await scanLibrary(libraryUri, (scan) => usePlayerState.setState({ scan }), previous, { full });
     useLibrary.getState().setLibrary(libraryUri, books);
     useProgress.getState().syncWithLibrary(books);
     pruneCovers(books);

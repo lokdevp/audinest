@@ -1,4 +1,4 @@
-import { initialPosition } from '@/lib/position';
+import { initialPosition, validPosition } from '@/lib/position';
 import { useLibrary } from './useLibrary';
 import { useProgress } from './useProgress';
 
@@ -10,7 +10,8 @@ export function useSelectedBook() {
   const selectedId = useProgress((state) => state.selectedId);
   const position = useProgress((state) => (selectedId && state.positions[selectedId]) || START);
   const book = useLibrary((state) => (selectedId ? state.books[selectedId] : undefined));
-  return { book, position };
+  // The library and progress are saved separately, so a crash between the two can leave a stale index.
+  return { book, position: book ? validPosition(book, position) : position };
 }
 
 /** Playback speed of a book, falling back to the default speed. */

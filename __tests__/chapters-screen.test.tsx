@@ -37,6 +37,12 @@ it('marks finished, current and upcoming chapters', async () => {
   expect(screen.getByText(/Up next/)).toBeOnTheScreen();
 });
 
+it('falls back to the first chapter when the saved chapter no longer exists', async () => {
+  useProgress.setState({ positions: { [book.id]: { chapterIdx: 7, currentTime: 30, totalProgressTime: 530 } } });
+  await renderRouter({ index: () => null, player: () => null, chapters: ChaptersScreen }, { initialUrl: '/chapters' });
+  expect(await screen.findByText('Ch. 1 of 3')).toBeOnTheScreen();
+});
+
 it('jumps to a chapter when its row is tapped', async () => {
   const router = await renderRouter({ index: () => null, player: () => null, chapters: ChaptersScreen }, { initialUrl: '/chapters' });
   fireEvent.press(await screen.findByText('Chapter 3'));

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { Audiobook, Position } from '@/types';
-import { initialPosition } from '@/lib/position';
+import { initialPosition, positionAtBookTime, positionInChapter, validPosition } from '@/lib/position';
 import { asyncStorage } from './storage';
 
 interface ProgressState {
@@ -22,6 +22,10 @@ interface ProgressState {
   syncWithLibrary: (books: Audiobook[]) => void;
 }
 
+/**
+ * Fits saved positions to the rescanned books. A position whose chapter still exists is clamped to it;
+ * otherwise it is carried over by its time in the book, or reset if that is past the end.
+ */
 export function reconcilePositions(
   positions: Record<string, Position>,
   books: Audiobook[],
@@ -29,8 +33,13 @@ export function reconcilePositions(
   return Object.fromEntries(
     books.map((book) => {
       const saved = positions[book.id];
-      const valid = saved && saved.chapterIdx < book.chapters.length;
-      return [book.id, valid ? saved : initialPosition()];
+      if (!saved) {
+        return [book.id, initialPosition()];
+      }
+      const position = saved.chapterIdx < book.chapters.length
+        ? positionInChapter(book, saved.chapterIdx, saved.currentTime)
+        : positionAtBookTime(book, saved.totalProgressTime);
+      return [book.id, position ?? initialPosition()];
     }),
   );
 }
@@ -67,8 +76,9 @@ export const useProgress = create<ProgressState>()(
   ),
 );
 
-export const getPosition = (id: string): Position =>
-  useProgress.getState().positions[id] ?? initialPosition();
+/** Saved position of a book, or its start if the position doesn't fit its chapters. */
+export const getPosition = (book: Audiobook): Position =>
+  validPosition(book, useProgress.getState().positions[book.id]);
 
 export const getSpeed = (id: string): number => {
   const { speeds, speed } = useProgress.getState();

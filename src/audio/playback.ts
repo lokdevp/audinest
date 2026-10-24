@@ -1,5 +1,6 @@
 import { isRunningInExpoGo } from 'expo';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
+import { Alert } from 'react-native';
 
 import type { Audiobook, Position } from '@/types';
 import {
@@ -36,6 +37,8 @@ let audioModeReady: Promise<void> | null = null;
 /** When playback last stopped, from any source (app, lock screen, headphones). */
 let pausedAt: number | null = null;
 let undoTimeout: ReturnType<typeof setTimeout> | null = null;
+/** Set once an error has been shown for the loaded file, so it isn't shown again on every status. */
+let errorShown = false;
 
 const UNDO_MS = 8000;
 
@@ -46,6 +49,19 @@ const selectedBook = (): Audiobook | null => {
 
 const savePosition = (book: Audiobook, position: Position) =>
   useProgress.getState().setPosition(book.id, position);
+
+function reportError(error: unknown) {
+  console.warn('Playback failed', error);
+  if (errorShown) {
+    return;
+  }
+  errorShown = true;
+  Alert.alert(
+    "Can't play this book",
+    'Its files may have been moved or deleted, or the app lost access to the folder. '
+      + 'Rescan the library or pick the folder again from the menu.',
+  );
+}
 
 function ensureAudioMode() {
   if (!audioModeReady) {
@@ -105,6 +121,12 @@ function onStatus(status: AudioStatus) {
   }
   syncSleepTimer(wasPlaying, status.playing);
   usePlayerState.setState({ playing: status.playing });
+  if (status.error) {
+    // Load the file again on the next play, instead of seeking a player that has failed.
+    loadedUri = null;
+    reportError(status.error);
+    return;
+  }
   if (status.playing && player) {
     tickSleepTimer(player);
   }
@@ -127,7 +149,7 @@ function onStatus(status: AudioStatus) {
     }
     seekTarget = null;
   }
-  const position = getPosition(book.id);
+  const position = getPosition(book);
   if (book.chapters[position.chapterIdx]?.uri !== loadedUri) {
     return;
   }
@@ -144,7 +166,7 @@ function onStatus(status: AudioStatus) {
 
 /** The loaded file ended: continue with the next file of the book, or stop at the end. */
 function onFileFinished(book: Audiobook) {
-  const nextIdx = nextFileChapterIdx(book, getPosition(book.id).chapterIdx);
+  const nextIdx = nextFileChapterIdx(book, getPosition(book).chapterIdx);
   const stopAtChapter = usePlayerState.getState().sleep?.kind === 'chapter';
   if (stopAtChapter) {
     usePlayerState.setState({ sleep: null });
@@ -155,7 +177,7 @@ function onFileFinished(book: Audiobook) {
     return;
   }
   savePosition(book, chapterStart(book, nextIdx));
-  load(book.chapters[nextIdx].uri, book.chapters[nextIdx].startTime, !stopAtChapter);
+  load(book.chapters[nextIdx].uri, book.chapters[nextIdx].startTime, !stopAtChapter).catch(reportError);
 }
 
 async function load(uri: string, seconds: number, autoplay: boolean) {
@@ -163,6 +185,7 @@ async function load(uri: string, seconds: number, autoplay: boolean) {
   if (loadedUri !== uri) {
     audio.replace({ uri });
     loadedUri = uri;
+    errorShown = false;
   }
   seekTarget = seconds;
   staleStatusCount = 0;
@@ -181,18 +204,28 @@ function moveTo(book: Audiobook, position: Position, autoplay = false) {
     return;
   }
   if (autoplay || loadedUri === uri) {
-    load(uri, fileTime(book, position), autoplay);
+    load(uri, fileTime(book, position), autoplay).catch(reportError);
   }
 }
 
+/** Starts or resumes the selected book. Failures are shown to the user, so callers needn't catch. */
 export async function play() {
+  try {
+    await startPlayback();
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+async function startPlayback() {
   const book = selectedBook();
   if (!book) {
     return;
   }
+  errorShown = false;
   await ensureAudioMode();
   activeBookId = book.id;
-  let position = getPosition(book.id);
+  let position = getPosition(book);
   useProgress.getState().markPlayed(book.id);
   if (isFinished(book, position)) {
     position = chapterStart(book, 0);
@@ -236,7 +269,7 @@ export function skip(seconds: number) {
   if (!book) {
     return;
   }
-  const position = getPosition(book.id);
+  const position = getPosition(book);
   const { uri } = book.chapters[position.chapterIdx];
   const current = player && loadedUri === uri && book.id === activeBookId
     ? player.currentTime
@@ -249,7 +282,7 @@ function rememberForUndo(book: Audiobook) {
   if (undoTimeout) {
     clearTimeout(undoTimeout);
   }
-  usePlayerState.setState({ undo: { bookId: book.id, position: getPosition(book.id) } });
+  usePlayerState.setState({ undo: { bookId: book.id, position: getPosition(book) } });
   undoTimeout = setTimeout(() => usePlayerState.setState({ undo: null }), UNDO_MS);
 }
 
@@ -260,7 +293,7 @@ export function seekInChapter(seconds: number) {
   const book = selectedBook();
   if (book) {
     rememberForUndo(book);
-    moveTo(book, positionInChapter(book, getPosition(book.id).chapterIdx, seconds));
+    moveTo(book, positionInChapter(book, getPosition(book).chapterIdx, seconds));
   }
 }
 
@@ -291,7 +324,7 @@ export function next() {
   if (!book) {
     return;
   }
-  const idx = nextChapterIdx(book, getPosition(book.id).chapterIdx);
+  const idx = nextChapterIdx(book, getPosition(book).chapterIdx);
   if (idx === -1) {
     pause();
   } else {
@@ -304,7 +337,7 @@ export function prev() {
   if (!book) {
     return;
   }
-  const idx = prevChapterIdx(getPosition(book.id).chapterIdx);
+  const idx = prevChapterIdx(getPosition(book).chapterIdx);
   if (idx !== -1) {
     goToChapter(idx);
   }

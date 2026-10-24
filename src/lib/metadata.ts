@@ -23,6 +23,19 @@ export interface FileMetadata {
 
 export const stripExtension = (name: string) => name.replace(/\.[^/.]+$/, '');
 
+/** Chapter lengths from their start times. The last chapter runs to the end of the file. */
+function chapterDurations(chapters: Omit<FileChapter, 'duration'>[], duration: number): FileChapter[] {
+  return chapters.map((chapter, idx) => {
+    const end = idx + 1 < chapters.length ? chapters[idx + 1].startTime : duration;
+    return { ...chapter, duration: Math.max(0, end - chapter.startTime) };
+  });
+}
+
+/** The metadata with a file duration found later (by the probe), and the chapters fitted to it. */
+export function withDuration(metadata: FileMetadata, duration: number): FileMetadata {
+  return { ...metadata, duration, chapters: chapterDurations(metadata.chapters, duration) };
+}
+
 export function toFileMetadata(metadata: IAudioMetadata, fileName: string): FileMetadata {
   const { common, format } = metadata;
   const duration = format.duration ?? 0;
@@ -30,10 +43,7 @@ export function toFileMetadata(metadata: IAudioMetadata, fileName: string): File
     title: chapter.title || `Chapter ${idx + 1}`,
     startTime: chapter.timeScale ? chapter.start / chapter.timeScale : chapter.start,
   }));
-  const chapters = embedded.map((chapter, idx) => {
-    const end = idx + 1 < embedded.length ? embedded[idx + 1].startTime : duration;
-    return { ...chapter, duration: Math.max(0, end - chapter.startTime) };
-  });
+  const chapters = chapterDurations(embedded, duration);
   return {
     album: common.album || null,
     author: common.albumartist || common.artist || null,
