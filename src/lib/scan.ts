@@ -223,14 +223,20 @@ async function parseSource(source: BookSource): Promise<Audiobook> {
 }
 
 export interface ScanProgress {
+  /** Listing the book folders, then reading the books. */
+  phase: 'listing' | 'reading';
   done: number;
   total: number;
 }
 
+/** Lets React render (progress, taps) between the synchronous file system calls of a scan. */
+const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 /**
  * Scans the library directory. Books in `previous` whose files haven't changed are reused without
- * reading their files, unless `full` is set. A book that fails to parse keeps its previous version
- * (so its progress isn't lost to a temporary read error), or is skipped if it is new.
+ * reading their files, unless `full` is set. A book whose folder can't be listed or that fails to
+ * parse keeps its previous version (so its progress isn't lost to a temporary read error), or is
+ * skipped if it is new.
  */
 export async function scanLibrary(
   libraryUri: string,
@@ -238,10 +244,25 @@ export async function scanLibrary(
   previous: Record<string, Audiobook> = {},
   { full = false } = {},
 ): Promise<Audiobook[]> {
-  const sources = classifyEntries(listDirectory({ name: '', uri: libraryUri, isDirectory: true }), listDirectory);
+  const children = listDirectory({ name: '', uri: libraryUri, isDirectory: true });
+  const folders = children.filter((child) => child.isDirectory);
+  const listings = new Map<string, Entry[]>();
+  const unlisted: string[] = [];
+  for (const [idx, folder] of folders.entries()) {
+    onProgress({ phase: 'listing', done: idx, total: folders.length });
+    await yieldToUi();
+    try {
+      listings.set(folder.uri, listDirectory(folder));
+    } catch (error) {
+      console.warn(`Can't list ${folder.name}:`, error);
+      unlisted.push(folder.uri);
+    }
+  }
+  const sources = classifyEntries(children, (entry) => listings.get(entry.uri) ?? []);
   const books: Audiobook[] = [];
-  onProgress({ done: 0, total: sources.length });
   for (const [idx, source] of sources.entries()) {
+    onProgress({ phase: 'reading', done: idx, total: sources.length });
+    await yieldToUi();
     const known = previous[source.id];
     try {
       const fingerprint = fingerprintSource(source);
@@ -252,8 +273,9 @@ export async function scanLibrary(
         books.push(known);
       }
     }
-    onProgress({ done: idx + 1, total: sources.length });
   }
+  // A folder that couldn't be listed keeps its previous book too.
+  unlisted.forEach((id) => previous[id] && books.push(previous[id]));
   return books;
 }
 

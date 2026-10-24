@@ -6,6 +6,7 @@ import type { Audiobook } from '@/types';
 /** A fake SAF mockTree: directory uri -> children, file uri -> size and modification time. */
 const mockTree: Record<string, string[]> = {};
 const mockStamps: Record<string, { size: number; modificationTime: number }> = {};
+const mockUnreadable = new Set<string>();
 
 jest.mock('expo-file-system', () => {
   class File {
@@ -25,6 +26,9 @@ jest.mock('expo-file-system', () => {
   }
   class Directory extends File {
     list() {
+      if (mockUnreadable.has(this.uri)) {
+        throw new Error('Permission denied');
+      }
       return (mockTree[this.uri] ?? []).map((uri) => (uri in mockTree ? new Directory(uri) : new File(uri)));
     }
   }
@@ -50,6 +54,7 @@ beforeEach(() => {
   });
   parse.mockClear();
   mockProbe.mockReset();
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 const byId = (books: Audiobook[]) => Object.fromEntries(books.map((book) => [book.id, book]));
@@ -125,4 +130,18 @@ describe('a folder with a file whose tags cannot be read', () => {
     const [book] = await scanLibrary('root', () => {});
     expect(book.chapters.map((chapter) => chapter.uri)).toEqual(['root/Book/1.mp3', 'root/Book/3.mp3']);
   });
+});
+
+it('keeps the previous book of a folder that cannot be listed', async () => {
+  mockTree.root = ['root/A.mp3', 'root/Dir'];
+  mockTree['root/Dir'] = ['root/Dir/1.mp3'];
+  const first = byId(await scanLibrary('root', () => {}));
+  mockUnreadable.add('root/Dir');
+  try {
+    const books = await scanLibrary('root', () => {}, first);
+    expect(books.map((book) => book.id)).toEqual(['root/A.mp3', 'root/Dir']);
+    expect(books[1]).toBe(first['root/Dir']);
+  } finally {
+    mockUnreadable.clear();
+  }
 });

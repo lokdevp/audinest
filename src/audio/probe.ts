@@ -5,7 +5,7 @@ import { createAudioPlayer } from 'expo-audio';
  * (e.g. a VBR MP3 without a Xing header). Resolves 0 if the file can't be played or doesn't load
  * within `timeoutMs`.
  */
-export function probeDuration(uri: string, timeoutMs = 10000): Promise<number> {
+export function probeDuration(uri: string, timeoutMs = 5000): Promise<number> {
   return new Promise((resolve) => {
     const player = createAudioPlayer({ uri });
     let settled = false;

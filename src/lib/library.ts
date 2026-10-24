@@ -7,8 +7,9 @@ export const LIBRARY_SORTS: { value: LibrarySort; label: string }[] = [
   { value: 'progress', label: 'Progress' },
 ];
 
-const byTitle = (a: Audiobook, b: Audiobook) =>
-  a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' });
+// One collator for all comparisons: `localeCompare` with options builds a new one on every call.
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const byTitle = (a: Audiobook, b: Audiobook) => collator.compare(a.title, b.title);
 
 const progress = (book: Audiobook, position: Position | undefined) =>
   book.duration > 0 ? (position?.totalProgressTime ?? 0) / book.duration : 0;

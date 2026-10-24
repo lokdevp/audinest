@@ -1,14 +1,22 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Pill } from '@/components/Pill';
 import { folderLabel } from '@/lib/format';
+import type { ScanProgress } from '@/lib/scan';
+import { goBack } from '@/lib/navigation';
 import { loadLibrary, pickLibraryFolder } from '@/store/libraryActions';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
 import { SKIP_OPTIONS, useSettings } from '@/store/useSettings';
 import { colors, radius, spacing, type } from '@/theme';
+
+function scanLabel({ phase, done, total }: ScanProgress) {
+  if (total === 0) return 'Reading folder…';
+  return phase === 'listing' ? `Reading folders ${done}/${total}` : `Scanning ${done}/${total}`;
+}
 
 const nextSkip = (seconds: number) => SKIP_OPTIONS[(SKIP_OPTIONS.indexOf(seconds) + 1) % SKIP_OPTIONS.length];
 
@@ -43,6 +51,14 @@ function PlaybackSettings() {
 export default function MenuScreen() {
   const libraryUri = useLibrary((state) => state.libraryUri);
   const scan = usePlayerState((state) => state.scan);
+  // A scan can outlast the screen: only go back if the user is still here when it ends.
+  const focused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    return () => {
+      focused.current = false;
+    };
+  }, []));
 
   const scanAndReturn = async (uri: string, full = false) => {
     try {
@@ -55,7 +71,9 @@ export default function MenuScreen() {
       );
       return;
     }
-    router.back();
+    if (focused.current) {
+      goBack();
+    }
   };
 
   const pickFolder = async () => {
@@ -83,7 +101,7 @@ export default function MenuScreen() {
           <View style={styles.scanning}>
             <ActivityIndicator color={colors.primary} />
             <Text style={styles.text}>
-              {scan.total > 0 ? `Scanning ${scan.done}/${scan.total}` : 'Reading folder…'}
+              {scanLabel(scan)}
             </Text>
           </View>
         ) : (

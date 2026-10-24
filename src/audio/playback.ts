@@ -11,12 +11,14 @@ import {
   isFinished,
   nextChapterIdx,
   nextFileChapterIdx,
+  positionAtBookTime,
   positionFromFileTime,
   positionInChapter,
   prevChapterIdx,
 } from '@/lib/position';
 import { rewindSeconds } from '@/lib/resume';
 import { sleepRemainingMs, sleepVolume } from '@/lib/sleep';
+import { flushWrites } from '@/store/storage';
 import { useLibrary } from '@/store/useLibrary';
 import { getPosition, getSpeed, useProgress } from '@/store/useProgress';
 import { usePlayerState } from '@/store/usePlayerState';
@@ -34,8 +36,8 @@ let activeBookId: string | null = null;
 let seekTarget: number | null = null;
 let staleStatusCount = 0;
 let audioModeReady: Promise<void> | null = null;
-/** When playback last stopped, from any source (app, lock screen, headphones). */
-let pausedAt: number | null = null;
+/** Bumped by every load and by `stop()`, so an older play or load that is still awaiting gives up. */
+let generation = 0;
 let undoTimeout: ReturnType<typeof setTimeout> | null = null;
 /** Set once an error has been shown for the loaded file, so it isn't shown again on every status. */
 let errorShown = false;
@@ -114,10 +116,13 @@ function tickSleepTimer(audio: AudioPlayer) {
 
 function onStatus(status: AudioStatus) {
   const wasPlaying = usePlayerState.getState().playing;
-  if (wasPlaying && !status.playing) {
-    pausedAt = Date.now();
-  } else if (status.playing) {
-    pausedAt = null;
+  if (activeBookId && wasPlaying !== status.playing) {
+    // Stored per book and persisted, so rewind on resume also works after the app was killed.
+    useProgress.getState().setPausedAt(activeBookId, status.playing ? null : Date.now());
+    if (!status.playing) {
+      // After this status is handled, so the last position is included.
+      setTimeout(flushWrites, 0);
+    }
   }
   syncSleepTimer(wasPlaying, status.playing);
   usePlayerState.setState({ playing: status.playing });
@@ -161,6 +166,10 @@ function onStatus(status: AudioStatus) {
     moveTo(book, chapterStart(book, next.chapterIdx));
     return;
   }
+  // Paused players keep reporting the same time; don't rewrite the store for it.
+  if (next.chapterIdx === position.chapterIdx && Math.abs(next.currentTime - position.currentTime) < 0.5) {
+    return;
+  }
   savePosition(book, next);
 }
 
@@ -171,6 +180,10 @@ function onFileFinished(book: Audiobook) {
   if (stopAtChapter) {
     usePlayerState.setState({ sleep: null });
   }
+  // ExoPlayer stays set to play after a file ends, so the next file would start without this.
+  if (nextIdx === -1 || stopAtChapter) {
+    getPlayer().pause();
+  }
   if (nextIdx === -1) {
     savePosition(book, bookEnd(book));
     usePlayerState.setState({ playing: false });
@@ -180,7 +193,9 @@ function onFileFinished(book: Audiobook) {
   load(book.chapters[nextIdx].uri, book.chapters[nextIdx].startTime, !stopAtChapter).catch(reportError);
 }
 
-async function load(uri: string, seconds: number, autoplay: boolean) {
+/** Loads a file and seeks in it. Resolves false if a newer load or `stop()` came first. */
+async function load(uri: string, seconds: number, autoplay: boolean): Promise<boolean> {
+  const gen = ++generation;
   const audio = getPlayer();
   if (loadedUri !== uri) {
     audio.replace({ uri });
@@ -190,15 +205,21 @@ async function load(uri: string, seconds: number, autoplay: boolean) {
   seekTarget = seconds;
   staleStatusCount = 0;
   await audio.seekTo(seconds);
+  if (gen !== generation) {
+    return false;
+  }
   audio.setPlaybackRate(activeBookId ? getSpeed(activeBookId) : useProgress.getState().speed, 'high');
   if (autoplay) {
     audio.play();
   }
+  return true;
 }
 
 /** Moves to a position; seeks the player too if the position's file is the loaded one. */
 function moveTo(book: Audiobook, position: Position, autoplay = false) {
   savePosition(book, position);
+  // A position the user picked is where playback should resume, without rewinding.
+  useProgress.getState().setPausedAt(book.id, null);
   const { uri } = book.chapters[position.chapterIdx];
   if (book.id !== activeBookId) {
     return;
@@ -223,28 +244,34 @@ async function startPlayback() {
     return;
   }
   errorShown = false;
+  const gen = ++generation;
   await ensureAudioMode();
+  if (gen !== generation) {
+    return;
+  }
   activeBookId = book.id;
   let position = getPosition(book);
+  const pausedAt = useProgress.getState().pausedAt[book.id];
   useProgress.getState().markPlayed(book.id);
   if (isFinished(book, position)) {
     position = chapterStart(book, 0);
     savePosition(book, position);
-  } else if (pausedAt !== null && useSettings.getState().rewindOnResume) {
+  } else if (pausedAt !== undefined && useSettings.getState().rewindOnResume) {
     const rewind = rewindSeconds(Date.now() - pausedAt);
     if (rewind > 0) {
-      position = positionFromFileTime(book, position.chapterIdx, Math.max(0, fileTime(book, position) - rewind));
+      // Stays in the current chapter, so resuming at a chapter start doesn't replay the previous one.
+      position = positionInChapter(book, position.chapterIdx, position.currentTime - rewind);
       savePosition(book, position);
     }
   }
-  pausedAt = null;
+  useProgress.getState().setPausedAt(book.id, null);
   const audio = getPlayer();
   const { uri } = book.chapters[position.chapterIdx];
   const target = fileTime(book, position);
   if (loadedUri === uri && audio.isLoaded && Math.abs(audio.currentTime - target) < 2) {
     audio.play();
-  } else {
-    await load(uri, target, true);
+  } else if (!(await load(uri, target, true))) {
+    return;
   }
   // The lock screen service is declared by the expo-audio config plugin, so Expo Go doesn't have it.
   if (isRunningInExpoGo()) return;
@@ -263,18 +290,27 @@ export function pause() {
   player?.pause();
 }
 
-/** Jumps `seconds` forward (or back, if negative) inside the current file. */
+const isPlaying = (book: Audiobook) => usePlayerState.getState().playing && book.id === activeBookId;
+
+/** Jumps `seconds` forward (or back, if negative), into the previous or next file if needed. */
 export function skip(seconds: number) {
   const book = selectedBook();
   if (!book) {
     return;
   }
-  const position = getPosition(book);
-  const { uri } = book.chapters[position.chapterIdx];
-  const current = player && loadedUri === uri && book.id === activeBookId
-    ? player.currentTime
-    : fileTime(book, position);
-  moveTo(book, positionFromFileTime(book, position.chapterIdx, Math.max(0, current + seconds)));
+  const saved = getPosition(book);
+  const { uri } = book.chapters[saved.chapterIdx];
+  // The saved position lags the player by up to a second.
+  const position = player && loadedUri === uri && book.id === activeBookId
+    ? positionFromFileTime(book, saved.chapterIdx, player.currentTime)
+    : saved;
+  if (book.duration <= 0) {
+    // Without a known length, book time can't be mapped to chapters: stay inside the file.
+    moveTo(book, positionFromFileTime(book, position.chapterIdx, Math.max(0, fileTime(book, position) + seconds)));
+    return;
+  }
+  const target = Math.min(Math.max(position.totalProgressTime + seconds, 0), book.duration);
+  moveTo(book, positionAtBookTime(book, target) ?? bookEnd(book), isPlaying(book));
 }
 
 /** Remembers the current position so a jump away from it can be undone for a few seconds. */
@@ -285,8 +321,6 @@ function rememberForUndo(book: Audiobook) {
   usePlayerState.setState({ undo: { bookId: book.id, position: getPosition(book) } });
   undoTimeout = setTimeout(() => usePlayerState.setState({ undo: null }), UNDO_MS);
 }
-
-const isPlaying = (book: Audiobook) => usePlayerState.getState().playing && book.id === activeBookId;
 
 /** Seeks to `seconds` into the current chapter (slider). */
 export function seekInChapter(seconds: number) {
@@ -403,11 +437,12 @@ export function setSleepTimer(choice: number | 'chapter' | null) {
 
 /** Stops playback before the library is replaced by a rescan. */
 export function stop() {
+  generation += 1;
   player?.pause();
   player?.clearLockScreenControls();
   loadedUri = null;
   activeBookId = null;
-  pausedAt = null;
+  flushWrites();
   if (player) {
     player.volume = 1;
   }

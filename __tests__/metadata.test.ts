@@ -63,6 +63,38 @@ describe('metadata parsing through FileHandleTokenizer', () => {
     const metadata = toFileMetadata({ common: {}, format: {} } as never, '03 - Untitled.mp3');
     expect(metadata).toMatchObject({ album: null, trackTitle: '03 - Untitled', duration: 0 });
   });
+  describe('embedded chapters', () => {
+    const chapters = (format: object) => toFileMetadata({ common: {}, format } as never, 'book.mp3');
+
+    it('sorts them by start time and fills in missing titles', () => {
+      const metadata = chapters({
+        duration: 300,
+        chapters: [{ title: 'Two', start: 100 }, { title: '', start: 0 }, { title: 'Three', start: 200 }],
+      });
+      expect(metadata.chapters).toEqual([
+        { title: 'Chapter 1', startTime: 0, duration: 100 },
+        { title: 'Two', startTime: 100, duration: 100 },
+        { title: 'Three', startTime: 200, duration: 100 },
+      ]);
+    });
+
+    it('adds a chapter for audio before the first one', () => {
+      const metadata = chapters({ duration: 100, chapters: [{ title: 'One', start: 30 }] });
+      expect(metadata.chapters.map((chapter) => [chapter.title, chapter.startTime])).toEqual([['Intro', 0], ['One', 30]]);
+    });
+
+    it('ignores chapters without a time scale', () => {
+      const metadata = chapters({ duration: 100, chapters: [{ title: 'One', start: 0, timeScale: 0 }] });
+      expect(metadata.chapters).toEqual([]);
+    });
+
+    it('takes the file length from the chapter ends when the parser has none', () => {
+      const metadata = chapters({ chapters: [{ title: 'One', start: 0, end: 60 }, { title: 'Two', start: 60, end: 90 }] });
+      expect(metadata.duration).toBe(90);
+      expect(metadata.chapters.map((chapter) => chapter.duration)).toEqual([60, 30]);
+    });
+  });
+
   it('fits the last chapter to a duration found later', () => {
     const format = { chapters: [{ title: 'One', start: 0 }, { title: 'Two', start: 60 }] };
     const metadata = withDuration(toFileMetadata({ common: {}, format } as never, 'book.mp3'), 150);

@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system';
-import { parseFromTokenizer, type IAudioMetadata, type IPicture } from 'music-metadata';
+import { parseFromTokenizer, type IAudioMetadata, type IChapter, type IPicture } from 'music-metadata';
 
 import { FileHandleTokenizer } from './fileTokenizer';
 
@@ -36,13 +36,40 @@ export function withDuration(metadata: FileMetadata, duration: number): FileMeta
   return { ...metadata, duration, chapters: chapterDurations(metadata.chapters, duration) };
 }
 
+/** Audio before the first chapter shorter than this is added to it instead of getting its own chapter. */
+const MIN_INTRO_SECONDS = 1;
+
+const seconds = (time: number, timeScale: number | undefined) => (timeScale ? time / timeScale : time);
+
+/**
+ * Embedded chapters sorted by start time, in seconds. Empty if they can't be timed (an MP4 chapter
+ * track without a time scale). The first chapter always starts at 0, so no audio is left out.
+ */
+function embeddedChapters(chapters: IChapter[]): Omit<FileChapter, 'duration'>[] {
+  if (chapters.some((chapter) => chapter.timeScale === 0)) {
+    return [];
+  }
+  // ID3 chapters come in table-of-contents order, which needn't be time order.
+  const timed = chapters
+    .map((chapter) => ({ title: chapter.title, startTime: seconds(chapter.start, chapter.timeScale) }))
+    .sort((a, b) => a.startTime - b.startTime)
+    .map((chapter, idx) => ({ ...chapter, title: chapter.title || `Chapter ${idx + 1}` }));
+  if (timed.length > 0 && timed[0].startTime >= MIN_INTRO_SECONDS) {
+    timed.unshift({ title: 'Intro', startTime: 0 });
+  } else if (timed.length > 0) {
+    timed[0] = { ...timed[0], startTime: 0 };
+  }
+  return timed;
+}
+
 export function toFileMetadata(metadata: IAudioMetadata, fileName: string): FileMetadata {
   const { common, format } = metadata;
-  const duration = format.duration ?? 0;
-  const embedded = (format.chapters ?? []).map((chapter, idx) => ({
-    title: chapter.title || `Chapter ${idx + 1}`,
-    startTime: chapter.timeScale ? chapter.start / chapter.timeScale : chapter.start,
-  }));
+  const embedded = embeddedChapters(format.chapters ?? []);
+  // ID3 chapters carry their end time, which also gives the file length when the parser has none.
+  const chapterEnd = embedded.length > 0
+    ? Math.max(0, ...(format.chapters ?? []).map((chapter) => seconds(chapter.end ?? 0, chapter.timeScale)))
+    : 0;
+  const duration = format.duration || chapterEnd;
   const chapters = chapterDurations(embedded, duration);
   return {
     album: common.album || null,
@@ -58,18 +85,20 @@ export async function readFileMetadata(
   file: File,
   { withCover }: { withCover: boolean },
 ): Promise<FileMetadata> {
-  const tokenizer = new FileHandleTokenizer(file.open(), {
-    size: file.size,
-    mimeType: file.type || undefined,
-    path: file.name,
-  });
+  const handle = file.open();
   try {
+    const tokenizer = new FileHandleTokenizer(handle, {
+      // Some providers report a size of 0 for the file; the open handle knows the real one.
+      size: handle.size || file.size,
+      mimeType: file.type || undefined,
+      path: file.name,
+    });
     const metadata = await parseFromTokenizer(tokenizer, {
       includeChapters: true,
       skipCovers: !withCover,
     });
     return toFileMetadata(metadata, file.name);
   } finally {
-    await tokenizer.close();
+    handle.close();
   }
 }

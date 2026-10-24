@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { MINI_PLAYER_HEIGHT, MiniPlayer } from '@/components/MiniPlayer';
 import { Pill } from '@/components/Pill';
 import { ResumeCard } from '@/components/ResumeCard';
 import { LIBRARY_SORTS, sortBooks } from '@/lib/library';
+import { push } from '@/lib/navigation';
 import { isFinished } from '@/lib/position';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
@@ -18,8 +19,8 @@ import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
 import { useSettings } from '@/store/useSettings';
 import { colors, fonts, spacing, type } from '@/theme';
 
-const openPlayer = () => router.push('/player');
-const openMenu = () => router.push('/menu');
+const openPlayer = () => push('/player');
+const openMenu = () => push('/menu');
 
 /** Long press on a book: mark it finished, or start it over once it is finished. */
 function showBookActions(id: string) {
@@ -37,6 +38,8 @@ function showBookActions(id: string) {
   ]);
 }
 
+const NO_POSITIONS: Record<string, never> = {};
+
 function HeaderTitle() {
   return (
     <View>
@@ -45,6 +48,17 @@ function HeaderTitle() {
     </View>
   );
 }
+
+function MenuButton() {
+  return (
+    <Pressable onPress={openMenu} hitSlop={10} style={styles.menuButton} accessibilityLabel="Menu">
+      <MaterialIcons name="menu" size={26} color={colors.onSurface} />
+    </Pressable>
+  );
+}
+
+// A constant, so re-renders (every second while playing) don't set the header options again.
+const SCREEN_OPTIONS = { headerTitle: HeaderTitle, headerLeft: MenuButton };
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
@@ -58,10 +72,11 @@ export default function LibraryScreen() {
   const { book: current, position } = useSelectedBook();
   const speed = useBookSpeed(current?.id);
   const allBooks = useMemo(() => Object.values(booksById), [booksById]);
-  // Re-sorted on position updates too; cheap next to rendering, and keeps "Progress" order live.
+  // Positions change every second while playing; only re-sort for them when the order depends on them.
+  const sortPositions = sort === 'progress' || hideFinished ? positions : NO_POSITIONS;
   const books = useMemo(
-    () => sortBooks(allBooks, sort, positions, lastPlayedAt, hideFinished),
-    [allBooks, sort, positions, lastPlayedAt, hideFinished],
+    () => sortBooks(allBooks, sort, sortPositions, lastPlayedAt, hideFinished),
+    [allBooks, sort, sortPositions, lastPlayedAt, hideFinished],
   );
   const sortIdx = LIBRARY_SORTS.findIndex(({ value }) => value === sort);
   const nextSort = () => useSettings.getState().setLibrarySort(LIBRARY_SORTS[(sortIdx + 1) % LIBRARY_SORTS.length].value);
@@ -74,16 +89,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerTitle: HeaderTitle,
-          headerLeft: () => (
-            <Pressable onPress={openMenu} hitSlop={10} style={styles.menuButton} accessibilityLabel="Menu">
-              <MaterialIcons name="menu" size={26} color={colors.onSurface} />
-            </Pressable>
-          ),
-        }}
-      />
+      <Stack.Screen options={SCREEN_OPTIONS} />
       <FlatList
         data={books}
         keyExtractor={(book) => book.id}

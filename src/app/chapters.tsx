@@ -1,4 +1,4 @@
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useCallback, useRef } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { AudiobookProgress } from '@/components/AudiobookProgress';
 import { CHAPTER_ROW_HEIGHT, ChapterRow, type ChapterState } from '@/components/ChapterRow';
 import { CoverArt } from '@/components/CoverArt';
 import { formattedDuration } from '@/lib/format';
+import { goBack } from '@/lib/navigation';
 import { useSelectedBook } from '@/store/useSelectedBook';
 import { colors, radius, spacing, type } from '@/theme';
 
@@ -22,11 +23,18 @@ export default function ChaptersScreen() {
   const { book, position } = useSelectedBook();
   const list = useRef<FlatList>(null);
   const scrolled = useRef(false);
+  const headerHeight = useRef(0);
+
+  // Rows have a fixed height, so the list can jump to any chapter without rendering the ones before it.
+  const getItemLayout = useCallback((_: unknown, index: number) => ({
+    length: CHAPTER_ROW_HEIGHT,
+    offset: headerHeight.current + index * CHAPTER_ROW_HEIGHT,
+    index,
+  }), []);
 
   const select = useCallback((idx: number) => {
     goToChapter(idx);
-    if (router.canGoBack()) router.back();
-    else router.replace('/player');
+    goBack('/player');
   }, []);
 
   if (!book) {
@@ -36,10 +44,11 @@ export default function ChaptersScreen() {
   const chapter = book.chapters[current];
 
   // Once the header has a height, bring the current chapter into view (one row above it stays visible).
-  const scrollToCurrent = (headerHeight: number) => {
+  const scrollToCurrent = (height: number) => {
+    headerHeight.current = height;
     if (scrolled.current || current < 2) return;
     scrolled.current = true;
-    const offset = headerHeight + (current - 1) * CHAPTER_ROW_HEIGHT;
+    const offset = height + (current - 1) * CHAPTER_ROW_HEIGHT;
     requestAnimationFrame(() => list.current?.scrollToOffset({ offset, animated: false }));
   };
 
@@ -83,13 +92,14 @@ export default function ChaptersScreen() {
       // Chapter titles aren't unique, so the index is the key.
       keyExtractor={(_, idx) => String(idx)}
       ListHeaderComponent={header}
-      initialNumToRender={Math.max(10, current + 6)}
+      getItemLayout={getItemLayout}
       renderItem={({ item, index }) => (
         <ChapterRow
           chapter={item}
           idx={index}
           state={chapterState(index, current)}
-          remaining={item.duration - position.currentTime}
+          // Only the current row shows it; a constant for the others keeps them from re-rendering every second.
+          remaining={index === current ? item.duration - position.currentTime : 0}
           onPress={select}
         />
       )}

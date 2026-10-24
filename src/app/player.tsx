@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,14 +12,15 @@ import { Pill } from '@/components/Pill';
 import { SliderControl } from '@/components/SliderControl';
 import { SpeedButton } from '@/components/SpeedButton';
 import { formattedTime } from '@/lib/format';
+import { push } from '@/lib/navigation';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
 import { useSettings } from '@/store/useSettings';
 import { useSleepLabel } from '@/store/useSleepLabel';
 import { colors, radius, spacing, type } from '@/theme';
 
-const openChapters = () => router.push('/chapters');
-const openSleep = () => router.push('/sleep');
+const openChapters = () => push('/chapters');
+const openSleep = () => push('/sleep');
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();

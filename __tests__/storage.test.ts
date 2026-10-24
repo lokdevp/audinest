@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { asyncStorage, fileStorage } from '@/store/storage';
+import { asyncStorage, fileStorage, flushWrites, throttledAsyncStorage } from '@/store/storage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
@@ -77,5 +77,30 @@ describe('asyncStorage', () => {
     await expect(asyncStorage!.getItem('progress')).resolves.toBeNull();
     await new Promise(process.nextTick);
     expect(await AsyncStorage.getItem('progress')).toBeNull();
+  });
+});
+
+describe('throttledAsyncStorage', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const stored = async () => JSON.parse((await AsyncStorage.getItem('progress')) ?? 'null');
+
+  it('writes only the latest value, once every few seconds', async () => {
+    const write = jest.spyOn(AsyncStorage, 'setItem');
+    write.mockClear();
+    throttledAsyncStorage!.setItem('progress', { state: { n: 1 }, version: 1 });
+    throttledAsyncStorage!.setItem('progress', { state: { n: 2 }, version: 1 });
+    expect(write).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(5000);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(await stored()).toEqual({ state: { n: 2 }, version: 1 });
+  });
+
+  it('writes at once when flushed', async () => {
+    throttledAsyncStorage!.setItem('progress', { state: { n: 3 }, version: 1 });
+    flushWrites();
+    expect(await stored()).toEqual({ state: { n: 3 }, version: 1 });
   });
 });

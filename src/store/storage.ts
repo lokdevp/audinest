@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
+import { AppState } from 'react-native';
 import { createJSONStorage, type PersistStorage } from 'zustand/middleware';
 
 /**
@@ -33,6 +34,49 @@ function recoverable<S>(storage: PersistStorage<S> | undefined): PersistStorage<
 }
 
 export const asyncStorage = recoverable(createJSONStorage(() => AsyncStorage));
+
+/** Writes held back by `throttled` storages, by store name. */
+const pendingWrites = new Map<string, () => void>();
+
+/** Writes all held-back values now. */
+export function flushWrites() {
+  [...pendingWrites.values()].forEach((write) => write());
+}
+
+// The OS may kill the app at any time once it's in the background.
+AppState.addEventListener('change', (state) => {
+  if (state !== 'active') {
+    flushWrites();
+  }
+});
+
+/**
+ * Writes at most once every `ms`, and only the latest value. For a store that changes every second
+ * (playback positions), so it isn't serialized and written again on every change.
+ */
+function throttled<S>(storage: PersistStorage<S> | undefined, ms: number): PersistStorage<S> | undefined {
+  if (!storage) {
+    return undefined;
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return {
+    ...storage,
+    setItem: (name, value) => {
+      const write = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        pendingWrites.delete(name);
+        Promise.resolve(storage.setItem(name, value)).catch((error) => console.warn(`Saving "${name}" failed`, error));
+      };
+      pendingWrites.set(name, write);
+      timer ??= setTimeout(() => pendingWrites.get(name)?.(), ms);
+    },
+  };
+}
+
+export const throttledAsyncStorage = throttled(asyncStorage, 5000);
 
 const storeFile = (name: string) => new File(Paths.document, `${name}.json`);
 const tempFile = (name: string) => new File(Paths.document, `${name}.json.tmp`);

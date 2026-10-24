@@ -26,7 +26,7 @@ export async function loadLibrary(libraryUri: string, { full = false } = {}) {
     return;
   }
   stop();
-  usePlayerState.setState({ scan: { done: 0, total: 0 } });
+  usePlayerState.setState({ scan: { phase: 'listing', done: 0, total: 0 } });
   try {
     const library = useLibrary.getState();
     const previous = library.libraryUri === libraryUri ? library.books : {};

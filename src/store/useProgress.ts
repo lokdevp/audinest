@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import type { Audiobook, Position } from '@/types';
 import { initialPosition, positionAtBookTime, positionInChapter, validPosition } from '@/lib/position';
-import { asyncStorage } from './storage';
+import { throttledAsyncStorage } from './storage';
 
 interface ProgressState {
   positions: Record<string, Position>;
@@ -13,9 +13,12 @@ interface ProgressState {
   speeds: Record<string, number>;
   /** When each book was last started, in ms since epoch. */
   lastPlayedAt: Record<string, number>;
+  /** When playback of each paused book stopped, in ms since epoch, for rewind on resume. */
+  pausedAt: Record<string, number>;
   select: (id: string) => void;
   setPosition: (id: string, position: Position) => void;
   markPlayed: (id: string) => void;
+  setPausedAt: (id: string, at: number | null) => void;
   /** Sets the speed of a book, and the default for books without one. */
   setSpeed: (id: string, speed: number) => void;
   /** After a rescan: keep positions of books that still exist and are still valid, reset the rest. */
@@ -59,20 +62,31 @@ export const useProgress = create<ProgressState>()(
       speed: 1,
       speeds: {},
       lastPlayedAt: {},
+      pausedAt: {},
       select: (id) => set({ selectedId: id }),
       setPosition: (id, position) =>
         set((state) => ({ positions: { ...state.positions, [id]: position } })),
       markPlayed: (id) => set((state) => ({ lastPlayedAt: { ...state.lastPlayedAt, [id]: Date.now() } })),
+      setPausedAt: (id, at) =>
+        set((state) => {
+          if ((state.pausedAt[id] ?? null) === at) {
+            return state;
+          }
+          const { [id]: _previous, ...pausedAt } = state.pausedAt;
+          return { pausedAt: at === null ? pausedAt : { ...pausedAt, [id]: at } };
+        }),
       setSpeed: (id, speed) => set((state) => ({ speed, speeds: { ...state.speeds, [id]: speed } })),
       syncWithLibrary: (books) =>
         set((state) => ({
           positions: reconcilePositions(state.positions, books),
           speeds: pruneRecord(state.speeds, books),
           lastPlayedAt: pruneRecord(state.lastPlayedAt, books),
+          pausedAt: pruneRecord(state.pausedAt, books),
           selectedId: books.some((book) => book.id === state.selectedId) ? state.selectedId : null,
         })),
     }),
-    { name: 'progress', storage: asyncStorage, version: 1 },
+    // Positions change every second while playing, so writes are throttled. Pausing flushes them.
+    { name: 'progress', storage: throttledAsyncStorage, version: 1 },
   ),
 );
 

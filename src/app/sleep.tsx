@@ -1,8 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { setSleepTimer } from '@/audio/playback';
+import { goBack } from '@/lib/navigation';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useSleepLabel } from '@/store/useSleepLabel';
 import { colors, radius, spacing, type } from '@/theme';
@@ -24,7 +24,7 @@ export default function SleepScreen() {
 
   const choose = (value: Choice) => {
     setSleepTimer(value);
-    router.back();
+    goBack('/player');
   };
 
   return (
