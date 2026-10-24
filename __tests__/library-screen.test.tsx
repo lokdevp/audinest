@@ -14,6 +14,7 @@ jest.mock('expo-file-system', () => ({
   File: class {
     exists = false;
     writeSync() {}
+    moveSync() {}
   },
 }));
 jest.mock('expo-crypto', () => ({}));
