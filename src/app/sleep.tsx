@@ -5,7 +5,7 @@ import { setSleepTimer } from '@/audio/playback';
 import { goBack } from '@/lib/navigation';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useSleepLabel } from '@/store/useSleepLabel';
-import { colors, radius, spacing, type } from '@/theme';
+import { colors, eyebrow, pressedStyle, radius, spacing, type } from '@/theme';
 
 type Choice = number | 'chapter' | null;
 
@@ -37,7 +37,11 @@ export default function SleepScreen() {
       </Text>
       <View style={styles.list}>
         {CHOICES.map(({ label, value }) => {
-          const active = value === 'chapter' ? sleep?.kind === 'chapter' : value === null && !sleep;
+          const active = value === null
+            ? !sleep
+            : value === 'chapter'
+              ? sleep?.kind === 'chapter'
+              : sleep?.kind === 'minutes' && sleep.minutes === value;
           return (
             <Pressable
               key={label}
@@ -60,11 +64,7 @@ const styles = StyleSheet.create({
   container: {
     padding: spacing.margin,
   },
-  eyebrow: {
-    ...type.labelSm,
-    color: colors.primary,
-    letterSpacing: 1.5,
-  },
+  eyebrow,
   heading: {
     ...type.headlineMobile,
     color: colors.onSurface,
@@ -86,11 +86,9 @@ const styles = StyleSheet.create({
   },
   active: {
     backgroundColor: colors.surfaceContainerHigh,
-    borderColor: 'rgba(125, 211, 252, 0.25)',
+    borderColor: colors.highlight,
   },
-  pressed: {
-    opacity: 0.8,
-  },
+  pressed: pressedStyle,
   label: {
     ...type.titleMd,
     color: colors.onSurface,

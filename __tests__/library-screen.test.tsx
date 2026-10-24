@@ -1,4 +1,4 @@
-import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
 import LibraryScreen from '@/app/index';
 import { useLibrary } from '@/store/useLibrary';
@@ -61,4 +61,19 @@ it('sorts and hides finished books', async () => {
   await fireEvent.press(screen.getByLabelText('Sort by Title'));
   expect(useSettings.getState().librarySort).toBe('recent');
   expect(screen.getByLabelText('Sort by Recent')).toBeOnTheScreen();
+});
+
+it('keeps the Progress order while positions change, so a book does not move under a tap', async () => {
+  const first = makeBook([['a.mp3', 0, 100]], 'First');
+  const second = makeBook([['b.mp3', 0, 100]], 'Second');
+  const at = (seconds: number) => ({ chapterIdx: 0, currentTime: seconds, totalProgressTime: seconds });
+  useLibrary.setState({ books: { [first.id]: first, [second.id]: second } });
+  useProgress.setState({ selectedId: null, positions: { First: at(50), Second: at(10) } });
+  useSettings.setState({ librarySort: 'progress', hideFinished: false });
+  await renderRouter({ index: LibraryScreen });
+  const order = () => screen.getAllByText(/^(First|Second)$/).map((node) => node.props.children);
+  expect(order()).toEqual(['First', 'Second']);
+
+  await act(() => useProgress.setState({ positions: { First: at(50), Second: at(90) } }));
+  expect(order()).toEqual(['First', 'Second']);
 });

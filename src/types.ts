@@ -37,5 +37,5 @@ export type LibrarySort = 'title' | 'recent' | 'progress';
 
 /** Pauses playback after a while (`endsAt` is null while paused) or at the end of the chapter. */
 export type SleepTimer =
-  | { kind: 'minutes'; endsAt: number | null; remainingMs: number }
+  | { kind: 'minutes'; minutes: number; endsAt: number | null; remainingMs: number }
   | { kind: 'chapter' };

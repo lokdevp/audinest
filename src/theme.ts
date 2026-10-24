@@ -1,4 +1,4 @@
-import type { TextStyle } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
 
 /** "Glacier" palette from the Stitch design. */
 export const colors = {
@@ -18,6 +18,9 @@ export const colors = {
   hairline: 'rgba(255, 255, 255, 0.06)',
   border: 'rgba(255, 255, 255, 0.1)',
   primaryTint: 'rgba(125, 211, 252, 0.12)',
+  /** Border of a selected or current row. */
+  highlight: 'rgba(125, 211, 252, 0.25)',
+  highlightStrong: 'rgba(125, 211, 252, 0.3)',
 };
 
 export const radius = { sm: 4, md: 8, lg: 12, xl: 16, full: 9999 };
@@ -49,3 +52,14 @@ export const type = {
     fontFamily: fonts.sansMedium, fontSize: 12, lineHeight: 16, letterSpacing: 0.6, fontVariant: ['tabular-nums'],
   },
 } satisfies Record<string, TextStyle>;
+
+/** Small uppercase label above a heading. */
+export const eyebrow = { ...type.labelSm, color: colors.primary, letterSpacing: 1.5 } satisfies TextStyle;
+
+/** Feedback on a pressed row or button. */
+export const pressedStyle = { opacity: 0.8 } satisfies ViewStyle;
+
+/** Bar along the left edge of the selected or current row. */
+export const accentBar = {
+  position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.primary,
+} satisfies ViewStyle;

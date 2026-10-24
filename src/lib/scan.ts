@@ -3,9 +3,20 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import type { Audiobook, BookType, Chapter } from '@/types';
 import { probeDuration } from '@/audio/probe';
-import { readFileMetadata, stripExtension, withDuration, type FileMetadata } from './metadata';
+import { readFileMetadata, withDuration, type FileMetadata } from './metadata';
+import { extension, naturalCompare, stripExtension } from './names';
 
 const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'bmp', 'webp'];
+/** Embedded picture types by MIME type. Tags can hold anything, so this also keeps the file name safe. */
+const PICTURE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/bmp': 'bmp',
+};
+
+/**
+ * Part of every fingerprint. Bump it when parsing changes, so the next rescan reads every book again
+ * instead of keeping what the old code produced.
+ */
+const SCAN_VERSION = 2;
 const AUDIO_TYPES = [
   '3gp', 'aac', 'awb', 'flac', 'm4a', 'm4b', 'mka', 'mkv', 'mp3', 'mp4', 'opus', 'oga', 'ogg', 'wav',
   'webm', 'wma',
@@ -31,15 +42,13 @@ export interface ParsedFile {
   metadata: FileMetadata;
 }
 
-const extension = (name: string) => name.match(/\.([^/.]+)$/)?.[1]?.toLowerCase() ?? '';
 // Hidden files, such as the `._name.mp3` files macOS leaves on copied folders, aren't audio.
 const isHidden = (name: string) => name.startsWith('.');
 export const isAudio = (name: string) => !isHidden(name) && AUDIO_TYPES.includes(extension(name));
 export const isImage = (name: string) => !isHidden(name) && IMAGE_TYPES.includes(extension(name));
 const isM4b = (name: string) => extension(name) === 'm4b';
 
-const byName = (a: Entry, b: Entry) =>
-  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+const byName = (a: Entry, b: Entry) => naturalCompare(a.name, b.name);
 
 /**
  * Each immediate child of the library becomes one audiobook: a directory holding audio files,
@@ -132,7 +141,7 @@ async function saveCover(source: BookSource, files: ParsedFile[]): Promise<strin
   }
   try {
     const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, source.id);
-    const ext = picture ? (picture.format.split('/')[1] ?? 'jpg') : extension(source.image!.name);
+    const ext = picture ? (PICTURE_EXTENSIONS[picture.format.toLowerCase()] ?? 'jpg') : extension(source.image!.name);
     // Unique name per scan, so expo-image / Image don't show a stale cached cover after a rescan.
     const cover = new File(coverDirectory(), `${hash}-${Date.now()}.${ext}`);
     if (picture) {
@@ -158,7 +167,8 @@ export function sourceFingerprint(stamps: FileStamp[]): string | null {
   if (stamps.some(({ size, modificationTime }) => size === undefined || modificationTime === undefined)) {
     return null;
   }
-  return stamps.map(({ name, size, modificationTime }) => `${name}:${size}:${modificationTime}`).join('|');
+  const files = stamps.map(({ name, size, modificationTime }) => `${name}:${size}:${modificationTime}`);
+  return [`v${SCAN_VERSION}`, ...files].join('|');
 }
 
 function stamp(entry: Entry): FileStamp {
@@ -279,14 +289,21 @@ export async function scanLibrary(
   return books;
 }
 
-/** Removes cover files no longer referenced by any book. */
+/** Removes cover files no longer referenced by any book. Failures are only logged: it is cleanup. */
 export function pruneCovers(books: Audiobook[]) {
-  const used = new Set(books.map((book) => book.coverUri));
-  coverDirectory()
-    .list()
-    .forEach((item) => {
-      if (item instanceof File && !used.has(item.uri)) {
-        item.delete();
+  // By file name: covers are compared with URIs saved earlier, whose format could differ.
+  const used = new Set(books.flatMap((book) => (book.coverUri ? [book.coverUri.split('/').pop()] : [])));
+  try {
+    coverDirectory().list().forEach((item) => {
+      if (item instanceof File && !used.has(item.name)) {
+        try {
+          item.delete();
+        } catch (error) {
+          console.warn(`Can't delete the cover ${item.name}:`, error);
+        }
       }
     });
+  } catch (error) {
+    console.warn("Can't clean up covers:", error);
+  }
 }

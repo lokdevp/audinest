@@ -5,18 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { goToChapter } from '@/audio/playback';
 import { AudiobookProgress } from '@/components/AudiobookProgress';
-import { CHAPTER_ROW_HEIGHT, ChapterRow, type ChapterState } from '@/components/ChapterRow';
+import { CHAPTER_ROW_HEIGHT, ChapterRow, chapterState } from '@/components/ChapterRow';
 import { CoverArt } from '@/components/CoverArt';
 import { formattedDuration } from '@/lib/format';
 import { goBack } from '@/lib/navigation';
 import { useSelectedBook } from '@/store/useSelectedBook';
-import { colors, radius, spacing, type } from '@/theme';
-
-function chapterState(idx: number, current: number): ChapterState {
-  if (idx < current) return 'done';
-  if (idx === current) return 'current';
-  return idx === current + 1 ? 'next' : 'later';
-}
+import { colors, eyebrow, radius, spacing, type } from '@/theme';
 
 export default function ChaptersScreen() {
   const insets = useSafeAreaInsets();
@@ -134,8 +128,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   eyebrow: {
-    ...type.labelSm,
-    color: colors.primary,
+    ...eyebrow,
     letterSpacing: 1.2,
   },
   bookTitle: {
@@ -153,7 +146,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: 'rgba(125, 211, 252, 0.25)',
+    borderColor: colors.highlight,
     backgroundColor: colors.surfaceContainer,
     overflow: 'hidden',
   },
@@ -177,7 +170,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(125, 211, 252, 0.3)',
+    borderColor: colors.highlightStrong,
     backgroundColor: colors.primaryTint,
   },
   dot: {

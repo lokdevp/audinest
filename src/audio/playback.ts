@@ -39,6 +39,13 @@ let audioModeReady: Promise<void> | null = null;
 /** Bumped by every load and by `stop()`, so an older play or load that is still awaiting gives up. */
 let generation = 0;
 let undoTimeout: ReturnType<typeof setTimeout> | null = null;
+/** Pauses at the chapter end for the end-of-chapter sleep timer, between two status updates. */
+let chapterStopTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Whether the last status said the player was playing. Kept apart from `usePlayerState.playing`,
+ * which `play()` and `pause()` set right away so the button doesn't lag behind the tap.
+ */
+let statusPlaying = false;
 /** Set once an error has been shown for the loaded file, so it isn't shown again on every status. */
 let errorShown = false;
 
@@ -58,6 +65,7 @@ function reportError(error: unknown) {
     return;
   }
   errorShown = true;
+  usePlayerState.setState({ playing: false });
   Alert.alert(
     "Can't play this book",
     'Its files may have been moved or deleted, or the app lost access to the folder. '
@@ -114,8 +122,42 @@ function tickSleepTimer(audio: AudioPlayer) {
   usePlayerState.setState({ sleep: null });
 }
 
+function clearChapterStop() {
+  if (chapterStopTimer) {
+    clearTimeout(chapterStopTimer);
+    chapterStopTimer = null;
+  }
+}
+
+/**
+ * Status updates come once a second, so waiting for one past the chapter end would play up to a
+ * second of the next chapter (more at higher speeds). When the end is due before the next update,
+ * pause on a timer instead. The end of a file is handled by `onFileFinished`.
+ */
+function scheduleChapterStop(book: Audiobook, position: Position) {
+  const chapter = book.chapters[position.chapterIdx];
+  const nextIdx = nextChapterIdx(book, position.chapterIdx);
+  if (chapterStopTimer || nextIdx === -1 || book.chapters[nextIdx].uri !== chapter.uri || chapter.duration <= 0) {
+    return;
+  }
+  const leftMs = ((chapter.duration - position.currentTime) / getSpeed(book.id)) * 1000;
+  if (leftMs > 1500) {
+    return;
+  }
+  chapterStopTimer = setTimeout(() => {
+    chapterStopTimer = null;
+    if (usePlayerState.getState().sleep?.kind !== 'chapter' || book.id !== activeBookId) {
+      return;
+    }
+    usePlayerState.setState({ sleep: null });
+    pause();
+    moveTo(book, chapterStart(book, nextIdx));
+  }, Math.max(0, leftMs));
+}
+
 function onStatus(status: AudioStatus) {
-  const wasPlaying = usePlayerState.getState().playing;
+  const wasPlaying = statusPlaying;
+  statusPlaying = status.playing;
   if (activeBookId && wasPlaying !== status.playing) {
     // Stored per book and persisted, so rewind on resume also works after the app was killed.
     useProgress.getState().setPausedAt(activeBookId, status.playing ? null : Date.now());
@@ -125,7 +167,10 @@ function onStatus(status: AudioStatus) {
     }
   }
   syncSleepTimer(wasPlaying, status.playing);
-  usePlayerState.setState({ playing: status.playing });
+  if (wasPlaying !== status.playing) {
+    // Only on a change, so a status from a player that is still loading doesn't undo `play()`.
+    usePlayerState.setState({ playing: status.playing });
+  }
   if (status.error) {
     // Load the file again on the next play, instead of seeking a player that has failed.
     loadedUri = null;
@@ -159,12 +204,16 @@ function onStatus(status: AudioStatus) {
     return;
   }
   const next = positionFromFileTime(book, position.chapterIdx, status.currentTime);
-  if (next.chapterIdx > position.chapterIdx && usePlayerState.getState().sleep?.kind === 'chapter') {
-    // Playback ran into the next chapter: stop at its start (status updates come once a second).
+  const stopAtChapter = usePlayerState.getState().sleep?.kind === 'chapter';
+  if (next.chapterIdx > position.chapterIdx && stopAtChapter) {
+    // Playback ran into the next chapter before the timer fired: stop at its start.
     usePlayerState.setState({ sleep: null });
-    player?.pause();
+    pause();
     moveTo(book, chapterStart(book, next.chapterIdx));
     return;
+  }
+  if (stopAtChapter && status.playing) {
+    scheduleChapterStop(book, next);
   }
   // Paused players keep reporting the same time; don't rewrite the store for it.
   if (next.chapterIdx === position.chapterIdx && Math.abs(next.currentTime - position.currentTime) < 0.5) {
@@ -217,6 +266,7 @@ async function load(uri: string, seconds: number, autoplay: boolean): Promise<bo
 
 /** Moves to a position; seeks the player too if the position's file is the loaded one. */
 function moveTo(book: Audiobook, position: Position, autoplay = false) {
+  clearChapterStop();
   savePosition(book, position);
   // A position the user picked is where playback should resume, without rewinding.
   useProgress.getState().setPausedAt(book.id, null);
@@ -244,6 +294,7 @@ async function startPlayback() {
     return;
   }
   errorShown = false;
+  usePlayerState.setState({ playing: true });
   const gen = ++generation;
   await ensureAudioMode();
   if (gen !== generation) {
@@ -287,6 +338,8 @@ async function startPlayback() {
 }
 
 export function pause() {
+  clearChapterStop();
+  usePlayerState.setState({ playing: false });
   player?.pause();
 }
 
@@ -300,9 +353,9 @@ export function skip(seconds: number) {
   }
   const saved = getPosition(book);
   const { uri } = book.chapters[saved.chapterIdx];
-  // The saved position lags the player by up to a second.
+  // The saved position lags the player by up to a second. A seek still under way is where it will be.
   const position = player && loadedUri === uri && book.id === activeBookId
-    ? positionFromFileTime(book, saved.chapterIdx, player.currentTime)
+    ? positionFromFileTime(book, saved.chapterIdx, seekTarget ?? player.currentTime)
     : saved;
   if (book.duration <= 0) {
     // Without a known length, book time can't be mapped to chapters: stay inside the file.
@@ -421,6 +474,7 @@ export function resetProgress(id: string) {
 
 /** Starts a sleep timer of `minutes`, stops at the end of the chapter, or (null) cancels it. */
 export function setSleepTimer(choice: number | 'chapter' | null) {
+  clearChapterStop();
   if (player) {
     player.volume = 1;
   }
@@ -431,17 +485,26 @@ export function setSleepTimer(choice: number | 'chapter' | null) {
   const remainingMs = choice * 60_000;
   const { playing } = usePlayerState.getState();
   usePlayerState.setState({
-    sleep: { kind: 'minutes', remainingMs, endsAt: playing ? Date.now() + remainingMs : null },
+    sleep: { kind: 'minutes', minutes: choice, remainingMs, endsAt: playing ? Date.now() + remainingMs : null },
   });
 }
 
 /** Stops playback before the library is replaced by a rescan. */
 export function stop() {
   generation += 1;
+  clearChapterStop();
+  if (undoTimeout) {
+    clearTimeout(undoTimeout);
+    undoTimeout = null;
+  }
   player?.pause();
   player?.clearLockScreenControls();
+  // Unload the file, so a rescan or a deleted book doesn't leave a stale source in the player.
+  player?.replace(null);
   loadedUri = null;
   activeBookId = null;
+  seekTarget = null;
+  staleStatusCount = 0;
   flushWrites();
   if (player) {
     player.volume = 1;

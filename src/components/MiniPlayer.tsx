@@ -26,20 +26,26 @@ export function MiniPlayer({
 }: Props) {
   return (
     <View style={[styles.wrapper, { bottom: bottomInset + spacing.sm }]}>
-      <Pressable
-        onPress={onOpen}
-        accessibilityRole="button"
-        accessibilityLabel={`Now playing: ${book.title}`}
-        style={styles.bar}
-      >
-        <AudiobookProgress progress={position.totalProgressTime} duration={book.duration} style={styles.progress} />
-        <View style={styles.row}>
-          <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={16} />
-          <View style={styles.info}>
-            <Text style={styles.title} numberOfLines={1}>{book.title}</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>
-              Ch. {position.chapterIdx + 1} of {book.chapters.length}
-            </Text>
+      {/* As in ResumeCard: the bar opens the player from behind, so its buttons aren't nested in it. */}
+      <View style={styles.bar}>
+        <Pressable
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={`Now playing: ${book.title}`}
+          style={({ pressed }) => [styles.opener, pressed && styles.pressed]}
+        />
+        <View pointerEvents="none">
+          <AudiobookProgress progress={position.totalProgressTime} duration={book.duration} style={styles.progress} />
+        </View>
+        <View style={styles.row} pointerEvents="box-none">
+          <View style={styles.summary} pointerEvents="none">
+            <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={16} />
+            <View style={styles.info}>
+              <Text style={styles.title} numberOfLines={1}>{book.title}</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                Ch. {position.chapterIdx + 1} of {book.chapters.length}
+              </Text>
+            </View>
           </View>
           <Pressable
             onPress={() => skip(skipSeconds)}
@@ -52,7 +58,7 @@ export function MiniPlayer({
           </Pressable>
           <PlayButton playing={playing} play={play} pause={pause} size={48} />
         </View>
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -73,8 +79,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17, 31, 57, 0.97)',
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
   },
+  opener: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: radius.xl,
+  },
+  pressed: {
+    backgroundColor: colors.hairline,
+  },
   progress: {
     height: 3,
+  },
+  summary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
   },
   row: {
     flex: 1,

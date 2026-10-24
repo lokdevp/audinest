@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formattedDuration } from '@/lib/format';
-import { colors, radius, spacing, type } from '@/theme';
+import { accentBar, colors, pressedStyle, radius, spacing, type } from '@/theme';
 import type { Chapter } from '@/types';
 
 /** Row height plus gap, for `getItemLayout`. */
@@ -11,6 +11,13 @@ export const CHAPTER_ROW_HEIGHT = 84;
 const GAP = spacing.sm + 2;
 
 export type ChapterState = 'done' | 'current' | 'next' | 'later';
+
+/** State of the chapter at `idx` when the chapter at `current` is playing. */
+export function chapterState(idx: number, current: number): ChapterState {
+  if (idx < current) return 'done';
+  if (idx === current) return 'current';
+  return idx === current + 1 ? 'next' : 'later';
+}
 
 interface Props {
   chapter: Chapter;
@@ -72,18 +79,12 @@ const styles = StyleSheet.create({
   },
   current: {
     backgroundColor: colors.surfaceContainerHigh,
-    borderColor: 'rgba(125, 211, 252, 0.3)',
+    borderColor: colors.highlightStrong,
   },
-  pressed: {
-    opacity: 0.8,
-  },
+  pressed: pressedStyle,
   accent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
+    ...accentBar,
     width: 4,
-    backgroundColor: colors.primary,
   },
   lead: {
     width: 40,

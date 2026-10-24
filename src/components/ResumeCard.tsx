@@ -20,24 +20,31 @@ interface Props {
 /** Large card for the book being listened to. */
 export function ResumeCard({ book, position, speed, playing, play, pause, onOpen }: Props) {
   const left = book.duration - position.totalProgressTime;
+  // The card opens the player through a layer behind the content, so the play button is its sibling
+  // rather than nested in it, and screen readers can reach both. The rest lets touches through to it.
   return (
-    <Pressable
-      onPress={onOpen}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${book.title}`}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-    >
-      <CoverArt uri={book.coverUri} title={book.title} author={book.author} style={styles.cover} fontSize={16} fullTitle />
-      <View style={styles.info}>
-        <View style={styles.badges}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{playing ? 'Playing' : 'In Progress'}</Text>
+    <View style={styles.card}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${book.title}`}
+        style={({ pressed }) => [styles.opener, pressed && styles.pressed]}
+      />
+      <View pointerEvents="none">
+        <CoverArt uri={book.coverUri} title={book.title} author={book.author} style={styles.cover} fontSize={16} fullTitle />
+      </View>
+      <View style={styles.info} pointerEvents="box-none">
+        <View pointerEvents="none">
+          <View style={styles.badges}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{playing ? 'Playing' : 'In Progress'}</Text>
+            </View>
+            <Text style={styles.speed}>{speed}×</Text>
           </View>
-          <Text style={styles.speed}>{speed}×</Text>
+          <Text style={styles.title} numberOfLines={3}>{book.title}</Text>
         </View>
-        <Text style={styles.title} numberOfLines={3}>{book.title}</Text>
-        <View style={styles.bottom}>
-          <View style={styles.flex}>
+        <View style={styles.bottom} pointerEvents="box-none">
+          <View style={styles.flex} pointerEvents="none">
             <Text style={styles.chapter}>Chapter {position.chapterIdx + 1} of {book.chapters.length}</Text>
             <Text style={styles.left}>{formattedDuration(left)} left</Text>
           </View>
@@ -45,9 +52,11 @@ export function ResumeCard({ book, position, speed, playing, play, pause, onOpen
             <PlayButton playing={playing} play={play} pause={pause} size={48} />
           </View>
         </View>
-        <AudiobookProgress progress={position.totalProgressTime} duration={book.duration} />
+        <View pointerEvents="none">
+          <AudiobookProgress progress={position.totalProgressTime} duration={book.duration} />
+        </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -63,8 +72,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     boxShadow: '0 8px 32px rgba(0, 10, 30, 0.6)',
   },
+  opener: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: radius.xl + 4,
+  },
   pressed: {
-    opacity: 0.9,
+    backgroundColor: colors.hairline,
   },
   cover: {
     width: 104,

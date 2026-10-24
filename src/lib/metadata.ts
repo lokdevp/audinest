@@ -2,6 +2,7 @@ import { File } from 'expo-file-system';
 import { parseFromTokenizer, type IAudioMetadata, type IChapter, type IPicture } from 'music-metadata';
 
 import { FileHandleTokenizer } from './fileTokenizer';
+import { stripExtension } from './names';
 
 export interface FileChapter {
   title: string;
@@ -20,8 +21,6 @@ export interface FileMetadata {
   chapters: FileChapter[];
   picture: IPicture | null;
 }
-
-export const stripExtension = (name: string) => name.replace(/\.[^/.]+$/, '');
 
 /** Chapter lengths from their start times. The last chapter runs to the end of the file. */
 function chapterDurations(chapters: Omit<FileChapter, 'duration'>[], duration: number): FileChapter[] {

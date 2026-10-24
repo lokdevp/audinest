@@ -1,5 +1,6 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { progressFraction } from '@/lib/position';
 import { colors, radius } from '@/theme';
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
 
 /** Thin rounded progress track. */
 export function AudiobookProgress({ progress, duration, style }: Props) {
-  const percent = duration > 0 ? Math.min(100, (progress / duration) * 100) : 0;
+  const percent = progressFraction(progress, duration) * 100;
   return (
     <View style={[styles.outer, style]}>
       <View style={[styles.inner, { width: `${percent}%` }]} />

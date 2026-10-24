@@ -1,5 +1,6 @@
 import type { Audiobook, LibrarySort, Position } from '@/types';
-import { isFinished } from './position';
+import { naturalCompare } from './names';
+import { isFinished, progressFraction } from './position';
 
 export const LIBRARY_SORTS: { value: LibrarySort; label: string }[] = [
   { value: 'title', label: 'Title' },
@@ -7,12 +8,10 @@ export const LIBRARY_SORTS: { value: LibrarySort; label: string }[] = [
   { value: 'progress', label: 'Progress' },
 ];
 
-// One collator for all comparisons: `localeCompare` with options builds a new one on every call.
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-const byTitle = (a: Audiobook, b: Audiobook) => collator.compare(a.title, b.title);
+const byTitle = (a: Audiobook, b: Audiobook) => naturalCompare(a.title, b.title);
 
 const progress = (book: Audiobook, position: Position | undefined) =>
-  book.duration > 0 ? (position?.totalProgressTime ?? 0) / book.duration : 0;
+  progressFraction(position?.totalProgressTime ?? 0, book.duration);
 
 /**
  * Orders the library: by title, most recently played first (never-played books last), or furthest

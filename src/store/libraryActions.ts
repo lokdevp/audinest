@@ -17,13 +17,17 @@ export async function pickLibraryFolder(): Promise<string | null> {
   }
 }
 
+/** `busy` when another scan was already running, `failed` when the folder couldn't be read. */
+export type ScanResult = 'done' | 'busy' | 'failed';
+
 /**
  * Rescans the library folder. Saved positions of books that are still there are kept. Unless `full`
  * is set, unchanged books of the same folder are kept as they are instead of being parsed again.
+ * Never rejects: a failure is logged and returned as `failed`, and the library is left as it was.
  */
-export async function loadLibrary(libraryUri: string, { full = false } = {}) {
+export async function loadLibrary(libraryUri: string, { full = false } = {}): Promise<ScanResult> {
   if (usePlayerState.getState().scan) {
-    return;
+    return 'busy';
   }
   stop();
   usePlayerState.setState({ scan: { phase: 'listing', done: 0, total: 0 } });
@@ -34,6 +38,10 @@ export async function loadLibrary(libraryUri: string, { full = false } = {}) {
     useLibrary.getState().setLibrary(libraryUri, books);
     useProgress.getState().syncWithLibrary(books);
     pruneCovers(books);
+    return 'done';
+  } catch (error) {
+    console.warn('Scan failed', error);
+    return 'failed';
   } finally {
     usePlayerState.setState({ scan: null });
   }

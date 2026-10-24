@@ -11,7 +11,7 @@ import { loadLibrary, pickLibraryFolder } from '@/store/libraryActions';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
 import { SKIP_OPTIONS, useSettings } from '@/store/useSettings';
-import { colors, radius, spacing, type } from '@/theme';
+import { colors, eyebrow, radius, spacing, type } from '@/theme';
 
 function scanLabel({ phase, done, total }: ScanProgress) {
   if (total === 0) return 'Reading folder…';
@@ -21,7 +21,11 @@ function scanLabel({ phase, done, total }: ScanProgress) {
 const nextSkip = (seconds: number) => SKIP_OPTIONS[(SKIP_OPTIONS.indexOf(seconds) + 1) % SKIP_OPTIONS.length];
 
 function PlaybackSettings() {
-  const settings = useSettings();
+  // Only the values shown here, so library sort changes don't re-render the menu.
+  const skipBack = useSettings((state) => state.skipBack);
+  const skipForward = useSettings((state) => state.skipForward);
+  const rewindOnResume = useSettings((state) => state.rewindOnResume);
+  const { setSkipBack, setSkipForward, setRewindOnResume } = useSettings.getState();
   return (
     <View style={styles.card}>
       <Text style={styles.eyebrow}>Playback</Text>
@@ -29,18 +33,18 @@ function PlaybackSettings() {
       <Text style={styles.text}>Tap a setting to change it.</Text>
       <View style={styles.buttons}>
         <Pill
-          label={`Skip back ${settings.skipBack} s`}
-          onPress={() => settings.setSkipBack(nextSkip(settings.skipBack))}
+          label={`Skip back ${skipBack} s`}
+          onPress={() => setSkipBack(nextSkip(skipBack))}
           icon={<MaterialIcons name="replay" size={18} color={colors.primary} />}
         />
         <Pill
-          label={`Skip forward ${settings.skipForward} s`}
-          onPress={() => settings.setSkipForward(nextSkip(settings.skipForward))}
+          label={`Skip forward ${skipForward} s`}
+          onPress={() => setSkipForward(nextSkip(skipForward))}
           icon={<MaterialIcons name="forward-30" size={18} color={colors.primary} />}
         />
         <Pill
-          label={`Rewind on resume: ${settings.rewindOnResume ? 'On' : 'Off'}`}
-          onPress={() => settings.setRewindOnResume(!settings.rewindOnResume)}
+          label={`Rewind on resume: ${rewindOnResume ? 'On' : 'Off'}`}
+          onPress={() => setRewindOnResume(!rewindOnResume)}
           icon={<MaterialIcons name="history" size={18} color={colors.primary} />}
         />
       </View>
@@ -61,17 +65,12 @@ export default function MenuScreen() {
   }, []));
 
   const scanAndReturn = async (uri: string, full = false) => {
-    try {
-      await loadLibrary(uri, { full });
-    } catch (error) {
-      console.warn('Scan failed', error);
+    if (await loadLibrary(uri, { full }) === 'failed') {
       Alert.alert(
         "Can't read the folder",
         'It may have been moved, or the app lost access to it. Pick the folder again.',
       );
-      return;
-    }
-    if (focused.current) {
+    } else if (focused.current) {
       goBack();
     }
   };
@@ -147,11 +146,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     backgroundColor: colors.surfaceContainerLow,
   },
-  eyebrow: {
-    ...type.labelSm,
-    color: colors.primary,
-    letterSpacing: 1.5,
-  },
+  eyebrow,
   heading: {
     ...type.headlineMobile,
     color: colors.onSurface,

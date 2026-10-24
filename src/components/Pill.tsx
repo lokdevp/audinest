@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors, radius, spacing, type } from '@/theme';
+import { colors, pressedStyle, radius, spacing, type } from '@/theme';
 
 interface Props {
   label: string;
@@ -43,9 +43,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.primary,
   },
-  pressed: {
-    opacity: 0.8,
-  },
+  pressed: pressedStyle,
   label: {
     ...type.labelMd,
     fontFamily: type.titleMd.fontFamily,

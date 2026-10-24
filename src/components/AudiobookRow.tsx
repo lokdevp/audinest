@@ -2,8 +2,8 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formattedTime } from '@/lib/format';
-import { isFinished } from '@/lib/position';
-import { colors, radius, spacing, type } from '@/theme';
+import { isFinished, progressFraction } from '@/lib/position';
+import { accentBar, colors, pressedStyle, radius, spacing, type } from '@/theme';
 import type { Audiobook, Position } from '@/types';
 import { AudiobookProgress } from './AudiobookProgress';
 import { CoverArt } from './CoverArt';
@@ -18,13 +18,22 @@ interface Props {
 
 export const AudiobookRow = memo(function AudiobookRow({ book, position, selected, onPress, onLongPress }: Props) {
   const elapsed = position?.totalProgressTime ?? 0;
-  const percent = book.duration > 0 ? Math.floor(Math.min(100, (elapsed / book.duration) * 100)) : 0;
+  const percent = Math.floor(progressFraction(elapsed, book.duration) * 100);
   const finished = isFinished(book, position);
+  const label = [book.title, book.author, finished ? 'finished' : `${percent}% listened`].filter(Boolean).join(', ');
   return (
     <Pressable
       style={({ pressed }) => [styles.row, selected && styles.selected, pressed && styles.pressed]}
       onPress={() => onPress(book.id)}
       onLongPress={onLongPress && (() => onLongPress(book.id))}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint="Opens the player"
+      // Screen readers can't long-press; this offers the same menu as an action.
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Book options' }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') onLongPress?.(book.id);
+      }}
     >
       {selected && <View style={styles.accent} />}
       <CoverArt uri={book.coverUri} title={book.title} style={styles.cover} fontSize={24} />
@@ -64,19 +73,10 @@ const styles = StyleSheet.create({
   },
   selected: {
     backgroundColor: colors.surfaceContainerHigh,
-    borderColor: 'rgba(125, 211, 252, 0.25)',
+    borderColor: colors.highlight,
   },
-  pressed: {
-    opacity: 0.8,
-  },
-  accent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: colors.primary,
-  },
+  pressed: pressedStyle,
+  accent: accentBar,
   cover: {
     width: 64,
     height: 88,

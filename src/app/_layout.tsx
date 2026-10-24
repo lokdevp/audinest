@@ -12,6 +12,9 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useHydrated } from '@/store/useHydrated';
 import { colors, type } from '@/theme';
 
+// A deep link to another screen still gets the library underneath, so back leads somewhere.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function RootLayout() {
   const hydrated = useHydrated();
   const [fontsLoaded, fontError] = useFonts({

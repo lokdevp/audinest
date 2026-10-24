@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 
-import { play, skip, stop } from '@/audio/playback';
+import { pause, play, skip, stop } from '@/audio/playback';
 import { useLibrary } from '@/store/useLibrary';
 import { usePlayerState } from '@/store/usePlayerState';
 import { useProgress } from '@/store/useProgress';
@@ -145,4 +145,61 @@ it('pauses at the end of a file when the sleep timer is set to the end of the ch
   expect(mockPlayer.replace).toHaveBeenLastCalledWith({ uri: '2.mp3' });
   expect(mockPlayer.play).not.toHaveBeenCalled();
   expect(savedPosition()).toEqual(at(2, 0, 100));
+});
+
+it('shows Pause as soon as Play is tapped, and Play as soon as Pause is tapped', async () => {
+  select(multiFileBook(), at(0, 30, 30));
+  const playing = play();
+  expect(usePlayerState.getState().playing).toBe(true);
+  await playing;
+  // A status from the player that hasn't started yet doesn't undo it.
+  mockPlayer.listener!(status({ playing: false, isLoaded: true, currentTime: 30 }));
+  expect(usePlayerState.getState().playing).toBe(true);
+
+  pause();
+  expect(usePlayerState.getState().playing).toBe(false);
+});
+
+it('skips from where a seek still under way will land', async () => {
+  select(multiFileBook(), at(0, 10, 10));
+  await play();
+  mockPlayer.currentTime = 10;
+  skip(20);
+  // The player hasn't reached 30 yet when the second tap comes.
+  skip(20);
+  expect(savedPosition()).toEqual(at(0, 50, 50));
+});
+
+it('stop() unloads the file and forgets a pending seek', async () => {
+  select(multiFileBook(), at(0, 10, 10));
+  await play();
+  skip(20);
+  stop();
+  expect(mockPlayer.replace).toHaveBeenLastCalledWith(null);
+  select(multiFileBook(), at(0, 10, 10));
+  await play();
+  mockPlayer.currentTime = 10;
+  skip(5);
+  expect(savedPosition()).toEqual(at(0, 15, 15));
+});
+
+describe('end of chapter inside one file', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('pauses on time instead of waiting for the next status', async () => {
+    select(singleFileBook(), at(0, 90, 90));
+    await play();
+    usePlayerState.setState({ sleep: { kind: 'chapter' } });
+    jest.useFakeTimers();
+    mockPlayer.listener!(status({ playing: true, isLoaded: true, currentTime: 90 }));
+    mockPlayer.listener!(status({ playing: true, isLoaded: true, currentTime: 99.5 }));
+    mockPlayer.pause.mockClear();
+
+    jest.advanceTimersByTime(400);
+    expect(mockPlayer.pause).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(200);
+    expect(mockPlayer.pause).toHaveBeenCalled();
+    expect(savedPosition()).toEqual(at(1, 0, 100));
+    expect(usePlayerState.getState().sleep).toBeNull();
+  });
 });

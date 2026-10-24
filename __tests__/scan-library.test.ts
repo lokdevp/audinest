@@ -62,7 +62,7 @@ const byId = (books: Audiobook[]) => Object.fromEntries(books.map((book) => [boo
 it('parses every book on the first scan and stores fingerprints', async () => {
   const books = await scanLibrary('root', () => {});
   expect(parse).toHaveBeenCalledTimes(2);
-  expect(books.map((book) => book.fingerprint)).toEqual(['A.mp3:100:1', 'B.mp3:200:2']);
+  expect(books.map((book) => book.fingerprint)).toEqual(['v2|A.mp3:100:1', 'v2|B.mp3:200:2']);
 });
 
 it('reuses unchanged books and parses only changed ones', async () => {
@@ -75,7 +75,7 @@ it('reuses unchanged books and parses only changed ones', async () => {
   expect(parse).toHaveBeenCalledTimes(1);
   expect(parse.mock.calls[0][0].uri).toBe('root/B.mp3');
   expect(books[0]).toBe(first['root/A.mp3']);
-  expect(books[1].fingerprint).toBe('B.mp3:201:3');
+  expect(books[1].fingerprint).toBe('v2|B.mp3:201:3');
 });
 
 it('parses again when a file has no modification time', async () => {

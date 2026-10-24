@@ -19,6 +19,8 @@ export function SliderControl({ currentTime, duration, onSeek }: Props) {
     <View>
       <Slider
         style={styles.slider}
+        accessibilityLabel="Position in chapter"
+        accessibilityValue={{ text: `${formattedTime(shownTime)} of ${formattedTime(duration)}` }}
         minimumValue={0}
         maximumValue={Math.max(duration, 1)}
         value={shownTime}

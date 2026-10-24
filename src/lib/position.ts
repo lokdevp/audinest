@@ -110,6 +110,11 @@ export function bookEnd(book: Audiobook): Position {
   return positionInChapter(book, lastIdx, book.chapters[lastIdx].duration);
 }
 
+/** How far `seconds` is through `duration`, from 0 to 1. 0 if the duration is unknown. */
+export function progressFraction(seconds: number, duration: number): number {
+  return duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0;
+}
+
 /** True once a position is within a second of the end of the book. Never true if its length is unknown. */
 export function isFinished(book: Audiobook, position: Position | undefined): boolean {
   return book.duration > 0 && (position?.totalProgressTime ?? 0) >= book.duration - 1;

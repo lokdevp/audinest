@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Stack } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { Stack, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,13 +17,13 @@ import { usePlayerState } from '@/store/usePlayerState';
 import { useProgress } from '@/store/useProgress';
 import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
 import { useSettings } from '@/store/useSettings';
-import { colors, fonts, spacing, type } from '@/theme';
+import { colors, eyebrow, fonts, spacing, type } from '@/theme';
 
 const openPlayer = () => push('/player');
 const openMenu = () => push('/menu');
 
-/** Long press on a book: mark it finished, or start it over once it is finished. */
-function showBookActions(id: string) {
+/** Long press on a book: mark it finished, or start it over once it is finished. Then `onDone`. */
+function showBookActions(id: string, onDone: () => void) {
   const book = useLibrary.getState().books[id];
   if (!book) {
     return;
@@ -31,9 +31,9 @@ function showBookActions(id: string) {
   const finished = isFinished(book, useProgress.getState().positions[id]);
   Alert.alert(book.title, undefined, [
     finished
-      ? { text: 'Reset progress', onPress: () => resetProgress(id) }
-      : { text: 'Mark as finished', onPress: () => markFinished(id) },
-    ...(finished ? [] : [{ text: 'Reset progress', onPress: () => resetProgress(id) }]),
+      ? { text: 'Reset progress', onPress: () => { resetProgress(id); onDone(); } }
+      : { text: 'Mark as finished', onPress: () => { markFinished(id); onDone(); } },
+    ...(finished ? [] : [{ text: 'Reset progress', onPress: () => { resetProgress(id); onDone(); } }]),
     { text: 'Cancel', style: 'cancel' as const },
   ]);
 }
@@ -51,7 +51,7 @@ function HeaderTitle() {
 
 function MenuButton() {
   return (
-    <Pressable onPress={openMenu} hitSlop={10} style={styles.menuButton} accessibilityLabel="Menu">
+    <Pressable onPress={openMenu} hitSlop={10} style={styles.menuButton} accessibilityRole="button" accessibilityLabel="Menu">
       <MaterialIcons name="menu" size={26} color={colors.onSurface} />
     </Pressable>
   );
@@ -72,16 +72,27 @@ export default function LibraryScreen() {
   const { book: current, position } = useSelectedBook();
   const speed = useBookSpeed(current?.id);
   const allBooks = useMemo(() => Object.values(booksById), [booksById]);
-  // Positions change every second while playing; only re-sort for them when the order depends on them.
-  const sortPositions = sort === 'progress' || hideFinished ? positions : NO_POSITIONS;
+  // Positions change every second while playing. The order follows them only when the library comes
+  // back into view or the sort changes, so a book doesn't move away just as the user taps it.
+  const [sortedAt, setSortedAt] = useState(() => useProgress.getState().positions);
+  const resort = useCallback(() => setSortedAt(useProgress.getState().positions), []);
+  useFocusEffect(resort);
+  const sortPositions = sort === 'progress' || hideFinished ? sortedAt : NO_POSITIONS;
   const books = useMemo(
     () => sortBooks(allBooks, sort, sortPositions, lastPlayedAt, hideFinished),
     [allBooks, sort, sortPositions, lastPlayedAt, hideFinished],
   );
   const sortIdx = LIBRARY_SORTS.findIndex(({ value }) => value === sort);
-  const nextSort = () => useSettings.getState().setLibrarySort(LIBRARY_SORTS[(sortIdx + 1) % LIBRARY_SORTS.length].value);
-  const toggleHideFinished = () => useSettings.getState().setHideFinished(!hideFinished);
+  const nextSort = () => {
+    resort();
+    useSettings.getState().setLibrarySort(LIBRARY_SORTS[(sortIdx + 1) % LIBRARY_SORTS.length].value);
+  };
+  const toggleHideFinished = () => {
+    resort();
+    useSettings.getState().setHideFinished(!hideFinished);
+  };
 
+  const openBookActions = useCallback((id: string) => showBookActions(id, resort), [resort]);
   const openBook = useCallback((id: string) => {
     selectBook(id);
     openPlayer();
@@ -102,7 +113,7 @@ export default function LibraryScreen() {
             position={positions[item.id]}
             selected={item.id === current?.id}
             onPress={openBook}
-            onLongPress={showBookActions}
+            onLongPress={openBookActions}
           />
         )}
         ListHeaderComponent={allBooks.length > 0 ? (
@@ -202,9 +213,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   eyebrow: {
-    ...type.labelSm,
-    color: colors.primary,
-    letterSpacing: 1.5,
+    ...eyebrow,
     marginHorizontal: spacing.margin,
     marginTop: spacing.md,
     marginBottom: spacing.sm + 4,

@@ -17,7 +17,7 @@ import { usePlayerState } from '@/store/usePlayerState';
 import { useBookSpeed, useSelectedBook } from '@/store/useSelectedBook';
 import { useSettings } from '@/store/useSettings';
 import { useSleepLabel } from '@/store/useSleepLabel';
-import { colors, radius, spacing, type } from '@/theme';
+import { colors, eyebrow, radius, spacing, type } from '@/theme';
 
 const openChapters = () => push('/chapters');
 const openSleep = () => push('/sleep');
@@ -107,11 +107,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: spacing.sm,
   },
-  eyebrow: {
-    ...type.labelSm,
-    color: colors.primary,
-    letterSpacing: 1.5,
-  },
+  eyebrow,
   chapterTitle: {
     ...type.displayMobile,
     color: colors.onSurface,
