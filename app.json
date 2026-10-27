@@ -33,7 +33,8 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "./plugins/withFdroid"
     ],
     "experiments": {
       "typedRoutes": true

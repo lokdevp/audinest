@@ -1,0 +1,25 @@
+AudiNest is an audiobook player for your own audio files. It has no ads, no accounts and no tracking, and it never goes online.
+
+Pick a folder, and every audio file or folder of audio files directly inside it becomes an audiobook. M4B chapters are read from the file, and your position in each book is remembered.
+
+<b>Library</b>
+<ul>
+<li>Pick a folder once; each audio file or folder of audio files inside it becomes a book</li>
+<li>Single-file M4B books with embedded chapters, and folder books with one chapter per file</li>
+<li>Title, author and cover art read from the files</li>
+<li>Sort by title, recently played or progress, and optionally hide finished books</li>
+<li>Long-press a book to mark it finished or reset its progress</li>
+<li>Fast rescans that skip unchanged books, plus a full rescan option</li>
+<li>Resume card and mini player to jump back into the current book</li>
+</ul>
+
+<b>Playback</b>
+<ul>
+<li>Position saved per book, kept across rescans</li>
+<li>Chapter list with jump to any chapter, and a "Back to …" button to undo a jump or seek</li>
+<li>Adjustable skip back / forward lengths (10–60 s)</li>
+<li>Rewind on resume: goes back 5–30 s depending on how long playback was paused</li>
+<li>Playback speed from 0.75× to 2×, remembered per book</li>
+<li>Sleep timer: 15/30/45/60 minutes (with a fade-out) or end of chapter</li>
+<li>Background playback and lock-screen controls</li>
+</ul>
