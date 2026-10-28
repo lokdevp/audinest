@@ -6,6 +6,13 @@ An audiobook player for Android built with [Expo](https://expo.dev) and React Na
 Pick a folder, and every audio file or folder of audio files directly inside it becomes an
 audiobook. M4B chapters are read from the file. Your position in each book is remembered.
 
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" width="200" alt="Library with the continue-listening card and book list">&emsp;
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.jpg" width="200" alt="Now Playing screen with cover and playback controls">&emsp;
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" width="200" alt="Chapter list with the current chapter highlighted">&emsp;
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.jpg" width="200" alt="Menu with library folder and playback settings">
+</p>
+
 AudiNest is derived from [native-audiobook-player](https://github.com/lokdevp/native-audiobook-player),
 an earlier project by the same author.
 
